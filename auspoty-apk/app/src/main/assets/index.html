@@ -14,62 +14,72 @@
 
 <!-- HOME VIEW -->
 <div id="view-home" class="view-section active">
-    <!-- Header -->
+
+    <!-- Header Greeting -->
     <div class="home-header">
-        <div class="app-logo">🎵 Auspoty</div>
+        <div>
+            <div class="greeting-sub" id="greetingTime">Selamat Datang</div>
+            <div class="app-logo">🎵 Auspoty</div>
+        </div>
         <div id="installAppBtn" class="header-install-btn" style="display:none;" onclick="installPWA()">
             <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
         </div>
     </div>
 
-    <!-- Featured Hero Banner -->
-    <div class="hero-banner" id="heroBanner">
-        <div class="hero-bg" id="heroBg"></div>
-        <div class="hero-content">
-            <div class="hero-label">🔥 Trending Sekarang</div>
-            <div id="heroTitle" class="hero-title">Memuat...</div>
-            <div id="heroArtist" class="hero-artist">—</div>
-            <button class="hero-play-btn" id="heroPlayBtn" onclick="playHeroTrack()">
-                <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                Putar Sekarang
-            </button>
+    <!-- Featured Big Card -->
+    <div class="featured-card" id="featuredCard" onclick="playHeroTrack()">
+        <div class="featured-bg" id="heroBg"></div>
+        <div class="featured-overlay"></div>
+        <div class="featured-content">
+            <div class="featured-badge">
+                <span class="pulse-dot"></span> TRENDING
+            </div>
+            <div id="heroTitle" class="featured-title">Memuat lagu...</div>
+            <div id="heroArtist" class="featured-artist">—</div>
+            <div class="featured-actions">
+                <div class="featured-play-btn">
+                    <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                </div>
+                <span class="featured-play-label">Putar Sekarang</span>
+            </div>
         </div>
     </div>
 
-    <!-- Quick Mood Pills -->
+    <!-- Mood Filter -->
     <div class="mood-row">
-        <div class="mood-pill active" onclick="filterMood(this,'lagu indonesia hits terbaru','recentList')">🎵 Untukmu</div>
-        <div class="mood-pill" onclick="filterMood(this,'lagu ceria gembira semangat','recentList')">😊 Ceria</div>
-        <div class="mood-pill" onclick="filterMood(this,'lagu galau sedih indonesia','recentList')">💔 Galau</div>
-        <div class="mood-pill" onclick="filterMood(this,'lagu fyp tiktok viral','recentList')">🔥 Viral</div>
-        <div class="mood-pill" onclick="filterMood(this,'lagu pop indonesia rilis terbaru','recentList')">✨ Baru</div>
+        <div class="mood-pill active" onclick="filterMood(this,'lagu indonesia hits terbaru','recentList')">✦ Untukmu</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu ceria gembira semangat','recentList')">☀ Ceria</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu galau sedih indonesia','recentList')">🌙 Galau</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu fyp tiktok viral','recentList')">⚡ Viral</div>
+        <div class="mood-pill" onclick="filterMood(this,'lagu pop indonesia rilis terbaru','recentList')">✦ Baru</div>
+        <div class="mood-pill" onclick="filterMood(this,'kpop hits terbaru','recentList')">★ K-Pop</div>
     </div>
 
-    <!-- Recent / Mood List -->
+    <!-- Mood List -->
     <div class="section-container">
-        <div class="vertical-list" id="recentList"><div class="loading-text">Memuat data...</div></div>
+        <div class="vertical-list" id="recentList"><div class="loading-text" style="padding:16px 0;">Memuat...</div></div>
     </div>
 
-    <!-- Genre Blocks -->
+    <!-- Genre Grid 2x3 -->
     <div class="section-container">
         <h2 class="section-title">Jelajahi Genre</h2>
         <div class="genre-grid" id="genreGrid"></div>
     </div>
 
-    <!-- Rilis Anyar -->
+    <!-- Rilis Anyar — big cards -->
     <div class="section-container">
         <div class="section-header">
             <h2 class="section-title">Rilis Anyar</h2>
-            <span class="see-all" onclick="searchByCategory('lagu pop indonesia rilis terbaru')">Lihat semua</span>
+            <span class="see-all" onclick="searchByCategory('lagu pop indonesia rilis terbaru')">Lihat semua →</span>
         </div>
-        <div class="horizontal-scroll" id="rowAnyar"></div>
+        <div class="horizontal-scroll big-scroll" id="rowAnyar"></div>
     </div>
 
-    <!-- Charts -->
+    <!-- Tangga Lagu — numbered list -->
     <div class="section-container">
         <div class="section-header">
             <h2 class="section-title">📈 Tangga Lagu</h2>
-            <span class="see-all" onclick="searchByCategory('top 50 indonesia playlist')">Lihat semua</span>
+            <span class="see-all" onclick="searchByCategory('top 50 indonesia playlist')">Lihat semua →</span>
         </div>
         <div class="chart-list" id="rowCharts"></div>
     </div>
@@ -77,13 +87,12 @@
     <!-- Viral TikTok -->
     <div class="section-container">
         <div class="section-header">
-            <h2 class="section-title">🎵 Viral TikTok</h2>
-            <span class="see-all" onclick="searchByCategory('lagu fyp tiktok viral')">Lihat semua</span>
+            <h2 class="section-title">🔥 Viral TikTok</h2>
         </div>
         <div class="horizontal-scroll" id="rowTiktok"></div>
     </div>
 
-    <!-- Artis -->
+    <!-- Artis Populer -->
     <div class="section-container">
         <div class="section-header">
             <h2 class="section-title">Artis Populer</h2>
@@ -106,6 +115,7 @@
         </div>
         <div class="horizontal-scroll" id="rowHits"></div>
     </div>
+
 </div>
 
 <!-- SEARCH VIEW -->
