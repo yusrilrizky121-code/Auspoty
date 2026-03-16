@@ -3,7 +3,6 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI
-from ytmusicapi import YTMusic
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 
@@ -16,7 +15,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-ytmusic = YTMusic()
+# Lazy init supaya cold start tidak timeout
+_ytmusic = None
+
+def get_ytmusic():
+    global _ytmusic
+    if _ytmusic is None:
+        from ytmusicapi import YTMusic
+        _ytmusic = YTMusic()
+    return _ytmusic
 
 def format_results(search_results):
     cleaned = []
@@ -25,27 +32,34 @@ def format_results(search_results):
             cleaned.append({
                 "videoId": item['videoId'],
                 "title": item.get('title', 'Unknown Title'),
-                "artist": item.get('artists', [{'name': 'Unknown Artist'}])[0]['name'] if 'artists' in item else 'Unknown Artist',
-                "thumbnail": item['thumbnails'][-1]['url'] if 'thumbnails' in item else ''
+                "artist": item.get('artists', [{'name': 'Unknown Artist'}])[0]['name'] if item.get('artists') else 'Unknown Artist',
+                "thumbnail": item['thumbnails'][-1]['url'] if item.get('thumbnails') else ''
             })
     return cleaned
+
+@app.get("/api/test")
+def test():
+    return {"status": "ok", "python": sys.version, "path": sys.path[:3]}
 
 @app.get("/api/search")
 def search_music(query: str):
     try:
-        results = ytmusic.search(query, filter="songs", limit=12)
-        return {"status": "success", "data": format_results(results)}
+        yt = get_ytmusic()
+        results = yt.search(query, filter="songs", limit=12)
+        data = format_results(results)
+        return {"status": "success", "data": data}
     except Exception as e:
         return {"status": "error", "message": str(e), "data": []}
 
 @app.get("/api/lyrics")
 def get_lyrics(video_id: str):
     try:
-        watch = ytmusic.get_watch_playlist(videoId=video_id)
+        yt = get_ytmusic()
+        watch = yt.get_watch_playlist(videoId=video_id)
         lyrics_id = watch.get("lyrics")
         if not lyrics_id:
             return {"status": "error", "message": "Lirik tidak ditemukan"}
-        lyrics = ytmusic.get_lyrics(lyrics_id)
+        lyrics = yt.get_lyrics(lyrics_id)
         return {"status": "success", "data": lyrics}
     except Exception as e:
         return {"status": "error", "message": str(e)}
