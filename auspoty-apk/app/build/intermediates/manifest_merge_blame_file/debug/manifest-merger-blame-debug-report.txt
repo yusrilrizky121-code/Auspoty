@@ -1,0 +1,111 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.auspoty.app"
+4    android:versionCode="1"
+5    android:versionName="1.0.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="21"
+9        android:targetSdkVersion="34" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:4:5-67
+11-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:4:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:5:5-79
+12-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:5:22-76
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:6:5-77
+13-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:6:22-74
+14    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+14-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:7:5-92
+14-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:7:22-89
+15
+16    <permission
+16-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:22:5-24:47
+17        android:name="com.auspoty.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+17-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:23:9-81
+18        android:protectionLevel="signature" />
+18-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:24:9-44
+19
+20    <uses-permission android:name="com.auspoty.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+20-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:26:5-97
+20-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:26:22-94
+21
+22    <application
+22-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:9:5-35:19
+23        android:allowAudioPlaybackCapture="true"
+23-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:17:9-49
+24        android:allowBackup="true"
+24-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:10:9-35
+25        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+25-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:28:18-86
+26        android:debuggable="true"
+27        android:extractNativeLibs="true"
+28        android:icon="@mipmap/ic_launcher"
+28-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:11:9-43
+29        android:label="@string/app_name"
+29-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:12:9-41
+30        android:roundIcon="@mipmap/ic_launcher_round"
+30-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:13:9-54
+31        android:supportsRtl="true"
+31-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:14:9-35
+32        android:theme="@style/AppTheme"
+32-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:15:9-40
+33        android:usesCleartextTraffic="true" >
+33-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:16:9-44
+34        <activity
+34-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:19:9-28:20
+35            android:name="com.auspoty.app.MainActivity"
+35-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:20:13-41
+36            android:configChanges="orientation|screenSize|keyboardHidden"
+36-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:22:13-74
+37            android:exported="true"
+37-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:21:13-36
+38            android:windowSoftInputMode="adjustResize" >
+38-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:23:13-55
+39            <intent-filter>
+39-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:24:13-27:29
+40                <action android:name="android.intent.action.MAIN" />
+40-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:25:17-69
+40-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:25:25-66
+41
+42                <category android:name="android.intent.category.LAUNCHER" />
+42-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:26:17-77
+42-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:26:27-74
+43            </intent-filter>
+44        </activity>
+45
+46        <service
+46-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:30:9-33:61
+47            android:name="com.auspoty.app.MusicService"
+47-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:31:13-41
+48            android:exported="false"
+48-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:32:13-37
+49            android:foregroundServiceType="mediaPlayback" />
+49-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:33:13-58
+50
+51        <provider
+51-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+52            android:name="androidx.startup.InitializationProvider"
+52-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+53            android:authorities="com.auspoty.app.androidx-startup"
+53-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+54            android:exported="false" >
+54-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+55            <meta-data
+55-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+56                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+56-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+57                android:value="androidx.startup" />
+57-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+58            <meta-data
+58-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
+59                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+59-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
+60                android:value="androidx.startup" />
+60-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
+61        </provider>
+62    </application>
+63
+64</manifest>

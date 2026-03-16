@@ -1,0 +1,39 @@
+{
+  "packageId": "com.auspoty.app",
+  "host": "clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app",
+  "name": "Auspoty",
+  "launcherName": "Auspoty",
+  "display": "standalone",
+  "themeColor": "#1ed760",
+  "navigationColor": "#121212",
+  "navigationColorDark": "#121212",
+  "navigationDividerColor": "#121212",
+  "navigationDividerColorDark": "#121212",
+  "backgroundColor": "#121212",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://cdn-icons-png.flaticon.com/512/174/174872.png",
+  "maskableIconUrl": "https://cdn-icons-png.flaticon.com/512/174/174872.png",
+  "monochromeIconUrl": "https://cdn-icons-png.flaticon.com/512/174/174872.png",
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "auspoty"
+  },
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app/",
+  "minSdkVersion": 19,
+  "orientation": "default",
+  "fingerprints": [],
+  "serviceAccountJsonFile": "",
+  "shortcuts": []
+}
