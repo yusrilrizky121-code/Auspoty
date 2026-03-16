@@ -277,17 +277,6 @@ function getHighResImage(url) {
     return url;
 }
 
-function createGridHTML(track) {
-    const img = getHighResImage(track.thumbnail || track.img || '');
-    const artist = track.artist || 'Unknown';
-    const data = encodeURIComponent(JSON.stringify({ videoId: track.videoId, title: track.title, artist, img }));
-    return `<div class="hg-item" onclick="playMusic('${track.videoId}','${data}')">
-        <img src="${img}" class="hg-img" onerror="this.src='https://placehold.co/200x200/282828/FFFFFF?text=Music'">
-        <div class="hg-title">${track.title}</div>
-        <div class="hg-artist">${artist}</div>
-    </div>`;
-}
-
 function createListHTML(track) {
     const img = getHighResImage(track.thumbnail || track.img || '');
     const artist = track.artist || 'Unknown';
@@ -494,34 +483,6 @@ function loadHomeData() {
     fetchAndRenderRow('hit terpopuler hari ini', 'homeRow1', 8);
     fetchAndRenderGrid('lagu fyp tiktok viral', 'homeGrid2', 6);
     fetchAndRenderRow('lagu galau sedih indonesia', 'homeRow2', 8);
-}
-
-// DEAD CODE KEPT FOR COMPAT
-function _oldLoadHomeData() {
-    const seen = new Set();
-    const container = document.getElementById('homeList');
-    if (container) container.innerHTML = '<div style="color:var(--text2);text-align:center;padding:32px;font-size:14px;grid-column:1/-1;">Memuat lagu...</div>';
-    let allTracks = [], done = 0;
-    queries.forEach(q => {
-        fetch(`${API_BASE}/api/search?query=${encodeURIComponent(q)}&limit=8`)
-            .then(r => r.json())
-            .then(result => {
-                if (result.status === 'success') {
-                    result.data.forEach(t => {
-                        if (!seen.has(t.videoId)) { seen.add(t.videoId); allTracks.push(t); }
-                    });
-                }
-            })
-            .catch(() => {})
-            .finally(() => {
-                done++;
-                if (done === queries.length && container) {
-                    container.innerHTML = allTracks.length
-                        ? allTracks.map(t => createGridHTML(t)).join('')
-                        : '<div style="color:var(--text2);text-align:center;padding:32px;grid-column:1/-1;">Gagal memuat lagu.</div>';
-                }
-            });
-    });
 }
 
 // SEARCH
