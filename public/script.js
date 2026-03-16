@@ -253,16 +253,15 @@ async function fetchSection(query, id, type, isArtist = false, limit = 8) {
     } catch (e) {}
 }
 
-async function loadHomeData() {
-    // Load satu per satu berurutan supaya tidak timeout di Vercel
-    await fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 4);
-    await fetchSection('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card');
-    await fetchSection('lagu ceria gembira semangat', 'rowGembira', 'card');
-    await fetchSection('top 50 indonesia playlist', 'rowCharts', 'card');
-    await fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
-    await fetchSection('lagu fyp tiktok viral', 'rowTiktok', 'card');
-    await fetchSection('penyanyi pop indonesia hits', 'rowArtists', 'card', true);
-    await fetchSection('hit terpopuler hari ini', 'rowHits', 'card');
+function loadHomeData() {
+    fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 4);
+    fetchSection('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card');
+    fetchSection('lagu ceria gembira semangat', 'rowGembira', 'card');
+    fetchSection('top 50 indonesia playlist', 'rowCharts', 'card');
+    fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
+    fetchSection('lagu fyp tiktok viral', 'rowTiktok', 'card');
+    fetchSection('penyanyi pop indonesia hits', 'rowArtists', 'card', true);
+    fetchSection('hit terpopuler hari ini', 'rowHits', 'card');
 }
 
 function renderSearchCategories() {
