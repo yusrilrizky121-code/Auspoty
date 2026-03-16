@@ -237,34 +237,31 @@ function createCardHTML(track, isArtist = false) {
 
 let homeIds = new Set();
 
-async function fetchAndRender(query, id, type, isArtist = false, dedup = false) {
-    try {
-        const res = await fetch(`/api/search?query=${encodeURIComponent(query)}`);
-        const result = await res.json();
-        if (result.status === 'success') {
-            const limit = id === 'recentList' ? 4 : 8;
-            let tracks = [];
-            for (let t of result.data) {
-                if (dedup) {
-                    if (!homeIds.has(t.videoId)) { homeIds.add(t.videoId); tracks.push(t); }
-                } else { tracks.push(t); }
-                if (tracks.length >= limit) break;
-            }
-            document.getElementById(id).innerHTML = tracks.map(t => type === 'list' ? createListHTML(t) : createCardHTML(t, isArtist)).join('');
-        }
-    } catch (e) {}
+function renderSection(tracks, id, type, isArtist = false) {
+    if (!tracks || !document.getElementById(id)) return;
+    document.getElementById(id).innerHTML = tracks.map(t => type === 'list' ? createListHTML(t) : createCardHTML(t, isArtist)).join('');
 }
 
-function loadHomeData() {
+async function loadHomeData() {
     homeIds.clear();
-    fetchAndRender('lagu indonesia hits terbaru', 'recentList', 'list', false, true);
-    fetchAndRender('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card', false, true);
-    fetchAndRender('lagu ceria gembira semangat', 'rowGembira', 'card', false, true);
-    fetchAndRender('top 50 indonesia playlist', 'rowCharts', 'card', false, true);
-    fetchAndRender('lagu galau sedih indonesia', 'rowGalau', 'card', false, true);
-    fetchAndRender('lagu fyp tiktok viral', 'rowTiktok', 'card', false, true);
-    fetchAndRender('penyanyi pop indonesia hits', 'rowArtists', 'card', true, true);
-    fetchAndRender('hit terpopuler hari ini', 'rowHits', 'card', false, true);
+    try {
+        const res = await fetch('/api/home');
+        const result = await res.json();
+        if (result.status === 'success') {
+            const d = result.data;
+            renderSection(d.recent,  'recentList', 'list');
+            renderSection(d.anyar,   'rowAnyar',   'card');
+            renderSection(d.gembira, 'rowGembira', 'card');
+            renderSection(d.charts,  'rowCharts',  'card');
+            renderSection(d.galau,   'rowGalau',   'card');
+            renderSection(d.tiktok,  'rowTiktok',  'card');
+            renderSection(d.artists, 'rowArtists', 'card', true);
+            renderSection(d.hits,    'rowHits',    'card');
+        }
+    } catch (e) {
+        // fallback: load satu per satu jika /api/home gagal
+        document.getElementById('recentList').innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;">Gagal memuat. Coba refresh.</div>';
+    }
 }
 
 function renderSearchCategories() {
