@@ -1,4 +1,4 @@
-// APK VERSION
+﻿// APK VERSION
 const API_BASE = "https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
 
 // PWA
@@ -442,7 +442,7 @@ function renderLibraryUI() {
             <div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
             <div class="lib-item-info">
                 <div class="lib-item-title">Lagu yang Disukai</div>
-                <div class="lib-item-sub">Playlist � ${req.result.length} lagu</div>
+                <div class="lib-item-sub">Playlist • ${req.result.length} lagu</div>
             </div>
         </div>`;
 
@@ -453,7 +453,7 @@ function renderLibraryUI() {
                     <img src="${p.img || 'https://via.placeholder.com/64?text=+'}" class="lib-item-img" onerror="this.src='https://via.placeholder.com/64?text=+'">
                     <div class="lib-item-info">
                         <div class="lib-item-title">${p.name}</div>
-                        <div class="lib-item-sub">Playlist � ${(p.tracks || []).length} lagu</div>
+                        <div class="lib-item-sub">Playlist • ${(p.tracks || []).length} lagu</div>
                     </div>
                 </div>`;
             });
@@ -473,7 +473,7 @@ function openPlaylistView(id) {
     document.getElementById('playlistTracksContainer').innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;">Memuat...</div>';
     if (id === 'liked') {
         document.getElementById('playlistNameDisplay').innerText = "Lagu yang Disukai";
-        document.getElementById('playlistImageDisplay').src = "https://via.placeholder.com/200/450af5/ffffff?text=?";
+        document.getElementById('playlistImageDisplay').src = "https://via.placeholder.com/200/450af5/ffffff?text=♥";
         const req = db.transaction("liked_songs", "readonly").objectStore("liked_songs").getAll();
         req.onsuccess = () => {
             currentPlaylistTracks = req.result;
