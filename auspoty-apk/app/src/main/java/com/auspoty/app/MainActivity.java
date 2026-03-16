@@ -53,11 +53,14 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Izinkan file:// assets dan API calls ke Vercel
+                // Izinkan semua request dari dalam WebView (fetch/XHR/iframe)
+                if (!request.hasGesture()) {
+                    return false;
+                }
+                // Navigasi user: izinkan file://, API, YouTube
                 if (url.startsWith("file://") || url.contains(API_HOST)) {
                     return false;
                 }
-                // YouTube iframe API boleh
                 if (url.contains("youtube.com") || url.contains("youtu.be") || url.contains("ytimg.com")) {
                     return false;
                 }

@@ -1,4 +1,4 @@
-// PWA
+﻿// PWA
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
@@ -151,37 +151,102 @@ function seekTo(value) {
     }
 }
 
-// LYRICS
+// LYRICS SPOTIFY-STYLE
+let lyricsLines = [];
+let lyricsScrollInterval = null;
+let currentHighlightIdx = -1;
+let lyricsType = 'plain';
+
 async function openLyricsModal() {
     if (!currentTrack) return;
     const modal = document.getElementById('lyricsModal');
     const body = document.getElementById('lyricsBody');
-
     document.getElementById('lyricsTrackImg').src = currentTrack.img;
     document.getElementById('lyricsTrackTitle').innerText = currentTrack.title;
     document.getElementById('lyricsTrackArtist').innerText = currentTrack.artist;
-    document.getElementById('lyricsBg').style.backgroundImage = `url('${currentTrack.img}')`;
+    document.getElementById('lyricsBg').style.backgroundImage = "url('" + currentTrack.img + "')";
     modal.style.display = 'flex';
-    body.innerHTML = '<div style="color:rgba(255,255,255,0.7);font-size:16px;text-align:center;margin-top:40px;">Menarik lirik dari server... ⏳</div>';
-
+    body.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Menarik lirik... </div>';
+    stopLyricsScroll();
+    lyricsLines = [];
+    currentHighlightIdx = -1;
     try {
-        const res = await fetch(`/api/lyrics?video_id=${currentTrack.videoId}`);
+        const res = await fetch("/api/lyrics?video_id=" + currentTrack.videoId);
         const result = await res.json();
-        if (result.status === 'success' && result.data && result.data.lyrics) {
-            body.innerHTML = result.data.lyrics;
+        if (result.status === 'success' && result.data && result.data.lines && result.data.lines.length > 0) {
+            lyricsLines = result.data.lines;
+            lyricsType = result.data.type || 'plain';
+            renderLyricsLines(body);
+            startLyricsScroll(body);
         } else {
-            body.innerHTML = '<div style="color:rgba(255,255,255,0.7);font-size:16px;text-align:center;margin-top:40px;">Lirik belum tersedia untuk lagu ini.</div>';
+            body.innerHTML = '<div style="color:rgba(255,255,255,0.5);font-size:16px;text-align:center;margin-top:40px;">Lirik belum tersedia untuk lagu ini.</div>';
         }
     } catch (e) {
-        body.innerHTML = '<div style="color:#ff5252;font-size:16px;text-align:center;margin-top:40px;">Gagal memuat lirik. Periksa koneksi internet.</div>';
+        body.innerHTML = '<div style="color:#ff5252;font-size:16px;text-align:center;margin-top:40px;">Gagal memuat lirik.</div>';
     }
+}
+
+function renderLyricsLines(body) {
+    let html = '<div style="height:45vh"></div>';
+    lyricsLines.forEach(function(line, i) {
+        html += '<div class="lyric-line" id="lyric-line-' + i + '">' + line.text + '</div>';
+    });
+    html += '<div style="height:45vh"></div>';
+    body.innerHTML = html;
+}
+
+function startLyricsScroll(body) {
+    stopLyricsScroll();
+    lyricsScrollInterval = setInterval(function() {
+        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        var cur = ytPlayer.getCurrentTime();
+        var dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (!dur || dur <= 0 || lyricsLines.length === 0) return;
+        var idx = 0;
+        if (lyricsType === 'synced') {
+            for (var i = 0; i < lyricsLines.length; i++) {
+                if (lyricsLines[i].time !== null && lyricsLines[i].time <= cur) idx = i;
+            }
+        } else {
+            idx = Math.min(Math.floor((cur / dur) * lyricsLines.length), lyricsLines.length - 1);
+        }
+        if (idx === currentHighlightIdx) return;
+        currentHighlightIdx = idx;
+        lyricsLines.forEach(function(_, i) {
+            var el = document.getElementById('lyric-line-' + i);
+            if (!el) return;
+            el.className = 'lyric-line' + (i === idx ? ' lyric-active' : (i < idx ? ' lyric-past' : ''));
+        });
+        var activeLine = document.getElementById('lyric-line-' + idx);
+        if (activeLine) activeLine.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 300);
+}
+
+function stopLyricsScroll() {
+    if (lyricsScrollInterval) { clearInterval(lyricsScrollInterval); lyricsScrollInterval = null; }
 }
 
 function closeLyrics() {
     document.getElementById('lyricsModal').style.display = 'none';
     document.getElementById('lyricsBody').innerHTML = '';
+    stopLyricsScroll();
+    lyricsLines = [];
+    currentHighlightIdx = -1;
 }
 
+// BACKGROUND AUDIO
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        if (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() === YT.PlayerState.PLAYING)
+            sessionStorage.setItem('wasPlaying', 'true');
+    } else {
+        if (sessionStorage.getItem('wasPlaying') === 'true') {
+            sessionStorage.removeItem('wasPlaying');
+            if (ytPlayer && ytPlayer.getPlayerState && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING)
+                ytPlayer.playVideo();
+        }
+    }
+});
 // TOAST
 let toastTimeout;
 function showToast(msg) {
