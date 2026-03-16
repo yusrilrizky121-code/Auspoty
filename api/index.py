@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from ytmusicapi import YTMusic
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
-import time
 
 app = FastAPI()
 
@@ -14,9 +13,6 @@ app.add_middleware(
 )
 
 ytmusic = YTMusic()
-
-home_cache = {}
-CACHE_TTL = 1800  # 30 menit
 
 def format_results(search_results):
     cleaned = []
@@ -31,35 +27,12 @@ def format_results(search_results):
     return cleaned
 
 @app.get("/api/search")
-def search_music(query: str):
+def search_music(query: str, limit: int = 10):
     try:
-        results = ytmusic.search(query, filter="songs", limit=12)
+        results = ytmusic.search(query, filter="songs", limit=limit)
         return {"status": "success", "data": format_results(results)}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
-
-@app.get("/api/home")
-def get_home_data():
-    current_time = time.time()
-    if "data" in home_cache and (current_time - home_cache.get("timestamp", 0) < CACHE_TTL):
-        return {"status": "success", "data": home_cache["data"]}
-    try:
-        data = {
-            "recent":  format_results(ytmusic.search('lagu indonesia hits terbaru', filter="songs", limit=4)),
-            "anyar":   format_results(ytmusic.search('lagu pop indonesia rilis terbaru anyar', filter="songs", limit=8)),
-            "gembira": format_results(ytmusic.search('lagu ceria gembira semangat', filter="songs", limit=8)),
-            "charts":  format_results(ytmusic.search('top 50 indonesia playlist update', filter="songs", limit=8)),
-            "galau":   format_results(ytmusic.search('lagu galau sedih indonesia terpopuler', filter="songs", limit=8)),
-            "baru":    format_results(ytmusic.search('lagu viral terbaru 2026', filter="songs", limit=8)),
-            "tiktok":  format_results(ytmusic.search('lagu fyp tiktok viral jedag jedug', filter="songs", limit=8)),
-            "artists": format_results(ytmusic.search('penyanyi pop indonesia paling hits', filter="songs", limit=8)),
-            "hits":    format_results(ytmusic.search('hit terpopuler hari ini indonesia', filter="songs", limit=8)),
-        }
-        home_cache["data"] = data
-        home_cache["timestamp"] = current_time
-        return {"status": "success", "data": data}
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "error", "message": str(e), "data": []}
 
 @app.get("/api/lyrics")
 def get_lyrics(video_id: str):

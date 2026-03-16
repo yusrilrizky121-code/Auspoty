@@ -238,30 +238,31 @@ function createCardHTML(track, isArtist = false) {
 let homeIds = new Set();
 
 function renderSection(tracks, id, type, isArtist = false) {
-    if (!tracks || !document.getElementById(id)) return;
-    document.getElementById(id).innerHTML = tracks.map(t => type === 'list' ? createListHTML(t) : createCardHTML(t, isArtist)).join('');
+    const el = document.getElementById(id);
+    if (!el || !tracks || tracks.length === 0) return;
+    el.innerHTML = tracks.map(t => type === 'list' ? createListHTML(t) : createCardHTML(t, isArtist)).join('');
+}
+
+async function fetchSection(query, id, type, isArtist = false, limit = 8) {
+    try {
+        const res = await fetch(`/api/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            renderSection(result.data, id, type, isArtist);
+        }
+    } catch (e) {}
 }
 
 async function loadHomeData() {
-    homeIds.clear();
-    try {
-        const res = await fetch('/api/home');
-        const result = await res.json();
-        if (result.status === 'success') {
-            const d = result.data;
-            renderSection(d.recent,  'recentList', 'list');
-            renderSection(d.anyar,   'rowAnyar',   'card');
-            renderSection(d.gembira, 'rowGembira', 'card');
-            renderSection(d.charts,  'rowCharts',  'card');
-            renderSection(d.galau,   'rowGalau',   'card');
-            renderSection(d.tiktok,  'rowTiktok',  'card');
-            renderSection(d.artists, 'rowArtists', 'card', true);
-            renderSection(d.hits,    'rowHits',    'card');
-        }
-    } catch (e) {
-        // fallback: load satu per satu jika /api/home gagal
-        document.getElementById('recentList').innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;">Gagal memuat. Coba refresh.</div>';
-    }
+    // Load satu per satu berurutan supaya tidak timeout di Vercel
+    await fetchSection('lagu indonesia hits terbaru', 'recentList', 'list', false, 4);
+    await fetchSection('lagu pop indonesia rilis terbaru', 'rowAnyar', 'card');
+    await fetchSection('lagu ceria gembira semangat', 'rowGembira', 'card');
+    await fetchSection('top 50 indonesia playlist', 'rowCharts', 'card');
+    await fetchSection('lagu galau sedih indonesia', 'rowGalau', 'card');
+    await fetchSection('lagu fyp tiktok viral', 'rowTiktok', 'card');
+    await fetchSection('penyanyi pop indonesia hits', 'rowArtists', 'card', true);
+    await fetchSection('hit terpopuler hari ini', 'rowHits', 'card');
 }
 
 function renderSearchCategories() {
