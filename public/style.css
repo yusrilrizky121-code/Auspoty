@@ -235,3 +235,31 @@ x; }
 /* DOWNLOAD */
 #downloadBtn, #downloadBtnMini { transition:opacity .2s,transform .15s; cursor:pointer; }
 #downloadBtn:active, #downloadBtnMini:active { transform:scale(.85); }
+
+
+/* FONT SIZE SCALING */
+body.font-small  { font-size: 12px !important; }
+body.font-normal { font-size: 16px !important; }
+body.font-large  { font-size: 19px !important; }
+body.font-xlarge { font-size: 22px !important; }
+body.font-small  .v-title { font-size: 12px !important; }
+body.font-small  .h-title { font-size: 11px !important; }
+body.font-small  .section-title { font-size: 16px !important; }
+body.font-small  .lib-item-title { font-size: 12px !important; }
+body.font-small  .settings-item-title { font-size: 12px !important; }
+body.font-small  .mini-player-title { font-size: 11px !important; }
+body.font-small  .player-title { font-size: 18px !important; }
+body.font-large  .v-title { font-size: 17px !important; }
+body.font-large  .h-title { font-size: 15px !important; }
+body.font-large  .section-title { font-size: 23px !important; }
+body.font-large  .lib-item-title { font-size: 17px !important; }
+body.font-large  .settings-item-title { font-size: 17px !important; }
+body.font-large  .mini-player-title { font-size: 15px !important; }
+body.font-large  .player-title { font-size: 26px !important; }
+body.font-xlarge .v-title { font-size: 20px !important; }
+body.font-xlarge .h-title { font-size: 17px !important; }
+body.font-xlarge .section-title { font-size: 26px !important; }
+body.font-xlarge .lib-item-title { font-size: 20px !important; }
+body.font-xlarge .settings-item-title { font-size: 20px !important; }
+body.font-xlarge .mini-player-title { font-size: 17px !important; }
+body.font-xlarge .player-title { font-size: 30px !important; }

@@ -279,7 +279,13 @@ const SECTION_TITLES_BY_LANG = {
     Korean:    ['최근 재생','신규 발매','신나는 노래','인기 차트','슬픈 노래','바이럴 틱톡','인기 아티스트','오늘의 히트'],
 };
 function getHomeQueries() {
-    const lang = getSettings().language || 'Indonesia';
+    const s = getSettings();
+    const region = s.region || 'Indonesia';
+    const lang = s.language || 'Indonesia';
+    // Region override dulu, kalau ada
+    if (HOME_QUERIES_BY_REGION && HOME_QUERIES_BY_REGION[region]) {
+        return HOME_QUERIES_BY_REGION[region];
+    }
     return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
 }
 function applyLanguageTitles() {
@@ -288,6 +294,42 @@ function applyLanguageTitles() {
     const titleEls = document.querySelectorAll('.section-title');
     const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
     titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
+
+const HOME_QUERIES_BY_REGION = {
+    Indonesia: null, // pakai HOME_QUERIES_BY_LANG
+    Global: [
+        { id: 'rowAnyar',   query: 'top global songs 2025' },
+        { id: 'rowGembira', query: 'happy pop songs 2025' },
+        { id: 'rowCharts',  query: 'billboard hot 100 2025' },
+        { id: 'rowGalau',   query: 'sad songs 2025' },
+        { id: 'rowTiktok',  query: 'viral tiktok global 2025' },
+        { id: 'rowHits',    query: 'trending songs worldwide 2025' },
+    ],
+    'Amerika Serikat': [
+        { id: 'rowAnyar',   query: 'new american songs 2025' },
+        { id: 'rowGembira', query: 'upbeat american pop 2025' },
+        { id: 'rowCharts',  query: 'us top charts 2025' },
+        { id: 'rowGalau',   query: 'sad american songs 2025' },
+        { id: 'rowTiktok',  query: 'viral tiktok usa 2025' },
+        { id: 'rowHits',    query: 'us trending songs today' },
+    ],
+    Jepang: [
+        { id: 'rowAnyar',   query: 'japanese new songs 2025' },
+        { id: 'rowGembira', query: 'japanese happy songs 2025' },
+        { id: 'rowCharts',  query: 'japan oricon chart 2025' },
+        { id: 'rowGalau',   query: 'japanese sad songs 2025' },
+        { id: 'rowTiktok',  query: 'japan viral tiktok 2025' },
+        { id: 'rowHits',    query: 'japanese trending today' },
+    ],
+    Korea: [
+        { id: 'rowAnyar',   query: 'kpop new songs 2025' },
+        { id: 'rowGembira', query: 'kpop happy songs 2025' },
+        { id: 'rowCharts',  query: 'kpop melon chart 2025' },
+        { id: 'rowGalau',   query: 'kpop sad songs 2025' },
+        { id: 'rowTiktok',  query: 'kpop viral tiktok 2025' },
+        { id: 'rowHits',    query: 'kpop trending today' },
+    ],
+};
 }
 const HOME_QUERIES = [
     { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
@@ -577,14 +619,10 @@ function applyAllSettings() {
     document.documentElement.style.setProperty('--spotify-green', t.g);
     document.documentElement.style.setProperty('--spotify-green-dark', t.g);
 
-    const sizes = { small: '13px', normal: '15px', large: '17px', xlarge: '20px' };
-    const sz = sizes[s.fontSize] || '15px';
-    document.documentElement.style.setProperty('--base-font-size', sz);
-    document.body.style.fontSize = sz;
-    // Apply ke semua elemen teks utama
-    document.querySelectorAll('.v-title,.h-title,.player-title,.settings-item-title,.lib-item-title').forEach(el => {
-        el.style.fontSize = '';
-    });
+    // Font size via body class
+    document.body.classList.remove('font-small','font-normal','font-large','font-xlarge');
+    const fsMap = { small:'font-small', normal:'font-normal', large:'font-large', xlarge:'font-xlarge' };
+    document.body.classList.add(fsMap[s.fontSize] || 'font-normal');
 
     const themeNames = { green: 'Ungu-Pink (Default)', blue: 'Biru-Indigo', red: 'Merah-Oranye', purple: 'Ungu-Magenta', orange: 'Oranye-Kuning' };
     const el = document.getElementById('themeLabel'); if (el) el.innerText = themeNames[s.theme] || 'Ungu-Pink (Default)';
