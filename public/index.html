@@ -14,7 +14,7 @@
     <!-- Firebase Auth SDK -->
     <script type="module">
       import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-      import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
       // =====================================================
@@ -40,19 +40,27 @@
       window._firebaseProvider = provider;
       window._firebaseSignIn = async function() {
         try {
-          const result = await signInWithPopup(auth, provider);
-          const user = result.user;
-          const userData = {
-            name: user.displayName || 'Pengguna Google',
-            email: user.email || '',
-            picture: user.photoURL || '',
-            sub: user.uid || '',
-          };
-          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-          if (typeof updateProfileUI === 'function') updateProfileUI();
-          if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
-          const modal = document.getElementById('loginModal');
-          if (modal) modal.style.display = 'none';
+          // Cek apakah mobile browser
+          const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+          if (isMobile) {
+            // Mobile: pakai redirect (lebih kompatibel)
+            await signInWithRedirect(auth, provider);
+          } else {
+            // Desktop: pakai popup
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            const userData = {
+              name: user.displayName || 'Pengguna Google',
+              email: user.email || '',
+              picture: user.photoURL || '',
+              sub: user.uid || '',
+            };
+            localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+            if (typeof updateProfileUI === 'function') updateProfileUI();
+            if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+            const modal = document.getElementById('loginModal');
+            if (modal) modal.style.display = 'none';
+          }
         } catch(e) {
           console.error('Firebase login error:', e);
           if (typeof showToast === 'function') showToast('Login gagal: ' + (e.message || 'coba lagi'));
@@ -66,7 +74,22 @@
           if (typeof showToast === 'function') showToast('Berhasil keluar');
         } catch(e) {}
       };
-      // Cek status login saat load
+      // Cek status login saat load + tangkap hasil redirect
+      getRedirectResult(auth).then((result) => {
+        if (result && result.user) {
+          const user = result.user;
+          const userData = {
+            name: user.displayName || 'Pengguna Google',
+            email: user.email || '',
+            picture: user.photoURL || '',
+            sub: user.uid || '',
+          };
+          localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+          if (typeof updateProfileUI === 'function') updateProfileUI();
+          if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+        }
+      }).catch((e) => { console.error('Redirect result error:', e); });
+
       onAuthStateChanged(auth, (user) => {
         if (user) {
           const userData = {
