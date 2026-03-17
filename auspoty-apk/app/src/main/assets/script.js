@@ -678,10 +678,18 @@ async function downloadMusic() {
         const result = await res.json();
 
         if (result.status === 'success' && result.url) {
-            // Stream URL dari yt-dlp — buka di tab baru, browser/HP akan download otomatis
-            showToast('Membuka link download...');
-            window.open(result.url, '_blank');
-            setTimeout(() => showToast('Jika tidak otomatis, tahan link lalu Simpan'), 1500);
+            showToast('Download dimulai...');
+            const ext = result.ext || 'mp4';
+            const fname = (title || 'lagu') + '.' + ext;
+            // Coba download langsung via anchor
+            const a = document.createElement('a');
+            a.href = result.url;
+            a.download = fname;
+            a.target = '_blank';
+            a.rel = 'noopener noreferrer';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { document.body.removeChild(a); showToast('Jika tidak tersimpan, tahan link lalu Simpan'); }, 1500);
         } else {
             showToast('Gagal: ' + (result.message || 'Coba lagi'));
         }

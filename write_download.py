@@ -1,4 +1,4 @@
-from http.server import BaseHTTPRequestHandler
+content = r'''from http.server import BaseHTTPRequestHandler
 import json
 import urllib.request
 import urllib.error
@@ -26,18 +26,19 @@ class handler(BaseHTTPRequestHandler):
         try:
             req = urllib.request.Request(
                 audio_info["url"],
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+                headers={"User-Agent": "Mozilla/5.0 (compatible; Auspoty/1.0)"}
             )
             with urllib.request.urlopen(req, timeout=30) as audio_resp:
-                ct = audio_resp.headers.get("Content-Type", "audio/webm")
-                cl = audio_resp.headers.get("Content-Length", "")
+                content_type = audio_resp.headers.get("Content-Type", "audio/webm")
+                content_length = audio_resp.headers.get("Content-Length", "")
                 ext = audio_info.get("ext", "webm")
-                safe = (audio_info.get("title") or title).replace('"', "'")[:80]
+                safe_title = (audio_info.get("title") or title).replace('"', "'")
                 self.send_response(200)
-                self.send_header("Content-Type", ct)
-                self.send_header("Content-Disposition", 'attachment; filename="' + safe + '.' + ext + '"')
-                if cl:
-                    self.send_header("Content-Length", cl)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Disposition",
+                    'attachment; filename="' + safe_title + '.' + ext + '"')
+                if content_length:
+                    self.send_header("Content-Length", content_length)
                 self._cors()
                 self.end_headers()
                 while True:
@@ -76,7 +77,10 @@ class handler(BaseHTTPRequestHandler):
                 url = instance + "/api/v1/videos/" + video_id + "?fields=title,adaptiveFormats"
                 req = urllib.request.Request(
                     url,
-                    headers={"User-Agent": "Mozilla/5.0 (compatible; Auspoty/1.0)", "Accept": "application/json"}
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (compatible; Auspoty/1.0)",
+                        "Accept": "application/json",
+                    }
                 )
                 with urllib.request.urlopen(req, timeout=12) as resp:
                     data = json.loads(resp.read().decode())
@@ -123,3 +127,8 @@ class handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+'''
+
+with open(r'api/download.py', 'w', encoding='utf-8') as f:
+    f.write(content)
+print('OK - api/download.py written')
