@@ -1,5 +1,8 @@
 from http.server import BaseHTTPRequestHandler
-import json, subprocess, sys, os, tempfile
+import json, subprocess, sys
+
+# Player clients yang bypass YouTube bot check (tested working)
+PLAYER_CLIENTS = ["android", "tv_embedded"]
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -13,37 +16,43 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             yt_url = "https://www.youtube.com/watch?v=" + video_id
+            last_err = "unknown"
 
-            # Pakai yt-dlp untuk extract direct audio stream URL (tanpa download file)
-            result = subprocess.run(
-                [
-                    sys.executable, "-m", "yt_dlp",
-                    "--get-url",
-                    "--format", "bestaudio[ext=m4a]/bestaudio/best",
-                    "--no-playlist",
-                    "--no-warnings",
-                    "--quiet",
-                    "--extractor-args", "youtube:skip=dash",
-                    yt_url
-                ],
-                capture_output=True,
-                text=True,
-                timeout=25
-            )
+            for client in PLAYER_CLIENTS:
+                try:
+                    result = subprocess.run(
+                        [
+                            sys.executable, "-m", "yt_dlp",
+                            "--get-url",
+                            "--format", "bestaudio[ext=m4a]/bestaudio/best",
+                            "--no-playlist",
+                            "--no-warnings",
+                            "--quiet",
+                            "--extractor-args", f"youtube:player_client={client}",
+                            yt_url
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=25
+                    )
+                    if result.returncode == 0 and result.stdout.strip():
+                        stream_url = result.stdout.strip().split("\n")[0]
+                        self._json(200, {
+                            "status": "success",
+                            "url": stream_url,
+                            "title": title
+                        })
+                        return
+                    last_err = result.stderr.strip()[:150] if result.stderr else "no output"
+                except subprocess.TimeoutExpired:
+                    last_err = "timeout"
+                    continue
+                except Exception as e:
+                    last_err = str(e)[:100]
+                    continue
 
-            if result.returncode == 0 and result.stdout.strip():
-                stream_url = result.stdout.strip().split("\n")[0]
-                self._json(200, {
-                    "status": "success",
-                    "url": stream_url,
-                    "title": title
-                })
-            else:
-                err = result.stderr.strip()[:200] if result.stderr else "yt-dlp gagal"
-                self._json(502, {"status": "error", "message": err})
+            self._json(502, {"status": "error", "message": last_err})
 
-        except subprocess.TimeoutExpired:
-            self._json(504, {"status": "error", "message": "Timeout saat mengambil link"})
         except Exception as e:
             self._json(500, {"status": "error", "message": str(e)})
 
