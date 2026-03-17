@@ -184,8 +184,31 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK && webView.canGoBack()) {
-            webView.goBack();
+        if (keyCode == KeyEvent.KEYCODE_BACK) {
+            // Coba navigasi balik di WebView dulu
+            if (webView.canGoBack()) {
+                webView.goBack();
+                return true;
+            }
+            // Coba navigasi ke home via JS (jika bukan di home)
+            webView.evaluateJavascript(
+                "(function(){ " +
+                "  var active = document.querySelector('.view-section.active');" +
+                "  if (active && active.id !== 'view-home') {" +
+                "    if (typeof switchView === 'function') switchView('home');" +
+                "    return 'navigated';" +
+                "  }" +
+                "  return 'home';" +
+                "})()",
+                result -> {
+                    if (result != null && result.contains("navigated")) {
+                        // sudah navigasi ke home, jangan keluar
+                    } else {
+                        // Sudah di home — minimize app ke background, JANGAN exit
+                        runOnUiThread(() -> moveTaskToBack(true));
+                    }
+                }
+            );
             return true;
         }
         return super.onKeyDown(keyCode, event);

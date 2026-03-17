@@ -369,7 +369,42 @@ function switchView(name) {
     const navItems = document.querySelectorAll('.nav-item');
     if (navMap[name] !== undefined && navItems[navMap[name]]) navItems[navMap[name]].classList.add('active');
     window.scrollTo(0, 0);
+    // Push ke browser history agar tombol back tidak keluar dari app
+    if (window.history && window.history.pushState) {
+        window.history.pushState({ view: name }, '', '#' + name);
+    }
 }
+
+// Handle tombol back browser/Android WebView
+window.addEventListener('popstate', function(e) {
+    if (e.state && e.state.view) {
+        // Navigasi ke view sebelumnya tanpa push state baru
+        document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+        const target = document.getElementById('view-' + e.state.view);
+        if (target) target.classList.add('active');
+        document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        const navMap = { home: 0, search: 1, library: 2, settings: 3 };
+        const navItems = document.querySelectorAll('.nav-item');
+        if (navMap[e.state.view] !== undefined && navItems[navMap[e.state.view]]) {
+            navItems[navMap[e.state.view]].classList.add('active');
+        }
+        window.scrollTo(0, 0);
+    } else {
+        // Tidak ada state — kembali ke home
+        document.querySelectorAll('.view-section').forEach(v => v.classList.remove('active'));
+        const home = document.getElementById('view-home');
+        if (home) home.classList.add('active');
+        const navItems = document.querySelectorAll('.nav-item');
+        if (navItems[0]) navItems[0].classList.add('active');
+    }
+});
+
+// Push state awal saat halaman load agar ada entry di history
+(function() {
+    if (window.history && window.history.replaceState) {
+        window.history.replaceState({ view: 'home' }, '', '#home');
+    }
+})();
 
 // RENDER HELPERS
 function makeTrackData(t) {
