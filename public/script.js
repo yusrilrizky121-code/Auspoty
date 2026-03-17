@@ -168,20 +168,61 @@ function updateMediaSession() {
         navigator.mediaSession.setActionHandler('nexttrack', playNextSimilarSong);
     }
 }
-async function playNextSimilarSong() {
-    if (!currentTrack) return;
+// ============================================================
+// AUTO-QUEUE: pre-load lagu berikutnya saat lagu sedang main
+// Sehingga saat ENDED tidak perlu fetch lagi (aman di background)
+// ============================================================
+let _autoQueue = [];       // queue lagu yang sudah di-fetch
+let _queueFetching = false;
+
+async function prefetchNextSongs(artist, currentVideoId) {
+    if (_queueFetching || _autoQueue.length >= 3) return;
+    _queueFetching = true;
     try {
-        const res = await apiFetch('/api/search?query=' + encodeURIComponent(currentTrack.artist + ' official audio'));
+        const res = await apiFetch('/api/search?query=' + encodeURIComponent(artist + ' official audio'));
         const result = await res.json();
         if (result.status === 'success' && result.data.length > 0) {
-            const related = result.data.filter(t => t.videoId !== currentTrack.videoId);
+            const related = result.data.filter(t => t.videoId !== currentVideoId);
+            // Shuffle dan ambil 5 lagu, simpan ke queue
+            const shuffled = related.sort(() => Math.random() - 0.5).slice(0, 5);
+            shuffled.forEach(t => {
+                if (!_autoQueue.find(q => q.videoId === t.videoId)) {
+                    const img = getHighResImage(t.thumbnail || t.img || '');
+                    _autoQueue.push({ videoId: t.videoId, title: t.title, artist: t.artist || 'Unknown', img });
+                }
+            });
+        }
+    } catch(e) {}
+    _queueFetching = false;
+}
+
+function playNextSimilarSong() {
+    if (!currentTrack) return;
+    // Ambil dari queue yang sudah di-fetch sebelumnya
+    if (_autoQueue.length > 0) {
+        const next = _autoQueue.shift(); // ambil dari depan
+        playMusic(next.videoId, encodeURIComponent(JSON.stringify(next)));
+        // Refill queue di background (tidak blocking)
+        setTimeout(() => prefetchNextSongs(next.artist, next.videoId), 500);
+        return;
+    }
+    // Fallback: coba fetch langsung (mungkin masih foreground)
+    _fetchAndPlayNext(currentTrack.artist, currentTrack.videoId);
+}
+
+async function _fetchAndPlayNext(artist, currentVideoId) {
+    try {
+        const res = await apiFetch('/api/search?query=' + encodeURIComponent(artist + ' official audio'));
+        const result = await res.json();
+        if (result.status === 'success' && result.data.length > 0) {
+            const related = result.data.filter(t => t.videoId !== currentVideoId);
             if (related.length > 0) {
                 const next = related[Math.floor(Math.random() * related.length)];
                 const img = getHighResImage(next.thumbnail || next.img || '');
                 playMusic(next.videoId, encodeURIComponent(JSON.stringify({ videoId: next.videoId, title: next.title, artist: next.artist || 'Unknown', img })));
             }
         }
-    } catch (e) {}
+    } catch(e) {}
 }
 function getHighResImage(url) {
     if (!url) return 'https://via.placeholder.com/300x300?text=music';
@@ -202,6 +243,11 @@ function playMusic(videoId, encodedData) {
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    // Pre-fetch lagu berikutnya di background saat lagu mulai
+    _autoQueue = []; // reset queue untuk artis baru
+    setTimeout(() => {
+        if (currentTrack) prefetchNextSongs(currentTrack.artist, currentTrack.videoId);
+    }, 3000); // tunggu 3 detik setelah lagu mulai
 }
 function togglePlay() { if (!ytPlayer) return; isPlaying ? ytPlayer.pauseVideo() : ytPlayer.playVideo(); }
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
