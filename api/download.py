@@ -1,35 +1,5 @@
 from http.server import BaseHTTPRequestHandler
-import json, urllib.request, ssl
-
-# Cobalt v10/v11 instances yang support YouTube (dari instances.cobalt.best)
-COBALT_INSTANCES = [
-    "https://cobalt-api.meowing.de",
-    "https://capi.3kh0.net",
-]
-
-def cobalt_request(instance, yt_url):
-    payload = json.dumps({
-        "url": yt_url,
-        "downloadMode": "audio",
-        "audioFormat": "mp3",
-        "audioBitrate": "128",
-        "filenameStyle": "basic"
-    }).encode()
-    req = urllib.request.Request(
-        instance + "/",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": "Auspoty/1.0 (+https://github.com/yusrilrizky121-code/clone2)"
-        },
-        method="POST"
-    )
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    with urllib.request.urlopen(req, timeout=15, context=ctx) as resp:
-        return json.loads(resp.read())
+import json, subprocess, sys, os, tempfile
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
@@ -37,43 +7,43 @@ class handler(BaseHTTPRequestHandler):
             length = int(self.headers.get('Content-Length', 0))
             body = json.loads(self.rfile.read(length))
             video_id = body.get("videoId", "")
+            title = body.get("title", "lagu")
             if not video_id:
                 self._json(400, {"status": "error", "message": "videoId required"})
                 return
 
             yt_url = "https://www.youtube.com/watch?v=" + video_id
-            last_error = "Semua server gagal"
 
-            for instance in COBALT_INSTANCES:
-                try:
-                    result = cobalt_request(instance, yt_url)
-                    status = result.get("status", "")
+            # Pakai yt-dlp untuk extract direct audio stream URL (tanpa download file)
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "yt_dlp",
+                    "--get-url",
+                    "--format", "bestaudio[ext=m4a]/bestaudio/best",
+                    "--no-playlist",
+                    "--no-warnings",
+                    "--quiet",
+                    "--extractor-args", "youtube:skip=dash",
+                    yt_url
+                ],
+                capture_output=True,
+                text=True,
+                timeout=25
+            )
 
-                    if status in ("tunnel", "redirect", "stream"):
-                        dl_url = result.get("url", "")
-                        if dl_url:
-                            self._json(200, {"status": "success", "url": dl_url})
-                            return
+            if result.returncode == 0 and result.stdout.strip():
+                stream_url = result.stdout.strip().split("\n")[0]
+                self._json(200, {
+                    "status": "success",
+                    "url": stream_url,
+                    "title": title
+                })
+            else:
+                err = result.stderr.strip()[:200] if result.stderr else "yt-dlp gagal"
+                self._json(502, {"status": "error", "message": err})
 
-                    elif status == "picker":
-                        items = result.get("picker", [])
-                        if items and items[0].get("url"):
-                            self._json(200, {"status": "success", "url": items[0]["url"]})
-                            return
-
-                    # Extract error message from cobalt v10/v11 format
-                    err = result.get("error", {})
-                    if isinstance(err, dict):
-                        last_error = err.get("code", str(result))
-                    else:
-                        last_error = str(err or result.get("text", "unknown"))
-
-                except Exception as e:
-                    last_error = str(e)[:100]
-                    continue
-
-            self._json(502, {"status": "error", "message": "Gagal: " + last_error})
-
+        except subprocess.TimeoutExpired:
+            self._json(504, {"status": "error", "message": "Timeout saat mengambil link"})
         except Exception as e:
             self._json(500, {"status": "error", "message": str(e)})
 

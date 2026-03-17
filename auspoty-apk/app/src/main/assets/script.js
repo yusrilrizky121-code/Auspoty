@@ -659,7 +659,6 @@ async function downloadMusic() {
     const btnMini = document.getElementById('downloadBtnMini');
     const title = (currentTrack.title || 'lagu').replace(/[^a-zA-Z0-9 ]/g, '').trim();
 
-    // Set loading state
     [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '0.4'; b.style.pointerEvents = 'none'; } });
     showToast('Menyiapkan download...');
 
@@ -667,33 +666,27 @@ async function downloadMusic() {
         const res = await fetch(API_BASE + '/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId: currentTrack.videoId })
+            body: JSON.stringify({ videoId: currentTrack.videoId, title: title })
         });
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            showToast('Server error: ' + (err.message || res.status));
+            showToast('Gagal: ' + (err.message || 'Error ' + res.status));
             return;
         }
 
         const result = await res.json();
 
         if (result.status === 'success' && result.url) {
-            showToast('Download dimulai: ' + (title || 'lagu'));
-            // Buka URL download di tab baru — browser/HP akan handle save file
-            const a = document.createElement('a');
-            a.href = result.url;
-            a.download = (title || 'lagu') + '.mp3';
-            a.rel = 'noopener';
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => document.body.removeChild(a), 1000);
+            // Stream URL dari yt-dlp — buka di tab baru, browser/HP akan download otomatis
+            showToast('Membuka link download...');
+            window.open(result.url, '_blank');
+            setTimeout(() => showToast('Jika tidak otomatis, tahan link lalu Simpan'), 1500);
         } else {
-            showToast('Gagal: ' + (result.message || 'Server tidak merespons'));
+            showToast('Gagal: ' + (result.message || 'Coba lagi'));
         }
     } catch (e) {
-        showToast('Gagal koneksi ke server download');
+        showToast('Gagal koneksi ke server');
     } finally {
         [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '1'; b.style.pointerEvents = ''; } });
     }
