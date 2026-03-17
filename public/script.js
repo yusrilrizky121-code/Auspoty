@@ -652,52 +652,13 @@ function clearLikedSongs() {
 
 
 // DOWNLOAD
-async function downloadMusic() {
-    if (!currentTrack) return;
-    const btn = document.getElementById('downloadBtn');
-    const btnMini = document.getElementById('downloadBtnMini');
-    const title = (currentTrack.title || 'lagu').replace(/[^a-zA-Z0-9 ]/g, '').trim();
-
-    [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '0.4'; b.style.pointerEvents = 'none'; } });
-    showToast('Menyiapkan download...');
-
-    try {
-        const res = await fetch('/api/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoId: currentTrack.videoId, title: title })
-        });
-
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            showToast('Gagal: ' + (err.message || 'Error ' + res.status));
-            return;
-        }
-
-        const result = await res.json();
-
-        if (result.status === 'success' && result.url) {
-            showToast('Download dimulai...');
-            const ext = result.ext || 'mp4';
-            const fname = (title || 'lagu') + '.' + ext;
-            // Coba download langsung via anchor
-            const a = document.createElement('a');
-            a.href = result.url;
-            a.download = fname;
-            a.target = '_blank';
-            a.rel = 'noopener noreferrer';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => { document.body.removeChild(a); showToast('Jika tidak tersimpan, tahan link lalu Simpan'); }, 1500);
-        } else {
-            showToast('Gagal: ' + (result.message || 'Coba lagi'));
-        }
-    } catch (e) {
-        showToast('Gagal koneksi ke server');
-    } finally {
-        [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '1'; b.style.pointerEvents = ''; } });
-    }
+function downloadMusic() {
+    if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
+    var dlUrl = 'https://id.ytmp3.mobi/v1/#' + currentTrack.videoId;
+    window.open(dlUrl, '_blank');
+    showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
 }
+
 
 // INIT
 applyAllSettings();
