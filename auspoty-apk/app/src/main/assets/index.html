@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/174/174872.png">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="/style.css">
     <script src="https://www.youtube.com/iframe_api"></script>
 </head>
 <body>
@@ -138,7 +138,7 @@
     <div class="settings-header"><h1>Pengaturan</h1></div>
 
     <!-- Profil -->
-    <div class="settings-profile-card">
+    <div class="settings-profile-card" onclick="openEditProfile()">
         <div class="settings-avatar" id="settingsAvatar">A</div>
         <div class="settings-profile-info">
             <div class="settings-profile-name" id="settingsProfileName">Pengguna Auspoty</div>
@@ -150,7 +150,7 @@
     <!-- Tampilan -->
     <div class="settings-group-label">Tampilan</div>
     <div class="settings-group">
-        <div class="settings-item">
+        <div class="settings-item" onclick="openThemePicker()">
             <div class="settings-item-left">
                 <div class="settings-icon" style="background:#8d67ab;"><svg viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg></div>
                 <div><div class="settings-item-title">Tema Warna</div><div class="settings-item-sub" id="themeLabel">Hijau (Default)</div></div>
@@ -167,7 +167,7 @@
         <div class="settings-item" onclick="openQualityPicker()">
             <div class="settings-item-left">
                 <div class="settings-icon" style="background:#477d95;"><svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z"/></svg></div>
-                <div><div class="settings-item-title">Kualitas Video</div><div class="settings-item-sub" id="qualityLabel">Auto</div></div>
+                <div><div class="settings-item-title">Kualitas Audio</div><div class="settings-item-sub" id="qualityLabel">Auto</div></div>
             </div>
             <svg viewBox="0 0 24 24" class="settings-chevron"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg>
         </div>
@@ -422,6 +422,25 @@
 </div>
 
 <div id="youtube-player" style="display:none;"></div>
-<script src="script.js"></script>
+
+<!-- EDIT PROFILE MODAL -->
+<div id="editProfileModal" style="display:none;position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,0.85);display:none;justify-content:center;align-items:flex-end;">
+    <div style="background:var(--bg-card);width:100%;border-radius:20px 20px 0 0;padding:24px 20px 40px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <h3 style="font-size:18px;font-weight:700;color:var(--text-main);">Edit Profil</h3>
+            <div onclick="closeEditProfile()" style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text-main);font-size:18px;">✕</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px;">
+            <div id="editProfileAvatar" style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--spotify-green),var(--spotify-green-dark));display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#000;margin-bottom:12px;">A</div>
+        </div>
+        <div style="margin-bottom:16px;">
+            <label style="font-size:12px;color:var(--text-sub);display:block;margin-bottom:6px;">Nama Pengguna</label>
+            <input id="editProfileName" type="text" placeholder="Masukkan nama..." style="width:100%;background:var(--bg-highlight);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px 14px;color:var(--text-main);font-size:15px;outline:none;">
+        </div>
+        <button onclick="saveProfile()" style="width:100%;background:var(--spotify-green);color:#000;border:none;border-radius:30px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;">Simpan</button>
+    </div>
+</div>
+
+<script src="/script.js"></script>
 </body>
 </html>

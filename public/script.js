@@ -453,6 +453,11 @@ function applyAllSettings() {
 
 function renderSettingsUI() {
     var s = getSettings();
+    var profileName = s.profileName || "Pengguna Auspoty";
+    var pnEl = document.getElementById("settingsProfileName");
+    var avEl = document.getElementById("settingsAvatar");
+    if (pnEl) pnEl.innerText = profileName;
+    if (avEl) avEl.innerText = profileName.charAt(0).toUpperCase();
     function setLabel(id, val) { var el = document.getElementById(id); if (el) el.innerText = val; }
     setLabel('themeLabel', (themeMap[s.theme] || themeMap.green).name);
     setLabel('qualityLabel', s.quality === 'auto' ? 'Auto' : s.quality);
@@ -561,6 +566,30 @@ function openRegionPicker() {
         showToast('Wilayah: ' + label);
     });
 }
+
+// PROFILE EDIT
+function openEditProfile() {
+    var s = getSettings();
+    var name = s.profileName || "Pengguna Auspoty";
+    var inp = document.getElementById("editProfileName");
+    var av = document.getElementById("editProfileAvatar");
+    if (inp) inp.value = name;
+    if (av) av.innerText = name.charAt(0).toUpperCase();
+    var modal = document.getElementById("editProfileModal");
+    if (modal) modal.style.display = "flex";
+}
+function closeEditProfile() {
+    var modal = document.getElementById("editProfileModal");
+    if (modal) modal.style.display = "none";
+}
+function saveProfile() {
+    var inp = document.getElementById("editProfileName");
+    var name = (inp && inp.value.trim()) ? inp.value.trim() : "Pengguna Auspoty";
+    var s = getSettings(); s.profileName = name; saveSettings(s);
+    var pn = document.getElementById("settingsProfileName"); if (pn) pn.innerText = name;
+    var av = document.getElementById("settingsAvatar"); if (av) av.innerText = name.charAt(0).toUpperCase();
+    closeEditProfile(); showToast("Profil diperbarui");
+}
 function clearCache() {
     if (!confirm('Hapus semua cache aplikasi?')) return;
     if ('caches' in window) caches.keys().then(function(keys) { keys.forEach(function(k) { caches.delete(k); }); });
@@ -591,3 +620,4 @@ window.onload = function() {
     loadHomeData();
     renderSearchCategories();
 };
+
