@@ -872,17 +872,18 @@ function openEditProfile() {
     var s = getSettings();
     var user = getGoogleUser();
     var nameInput = document.getElementById('editProfileName');
-    if (nameInput) nameInput.value = s.profileName || (user ? user.name : '');
+    if (nameInput) nameInput.value = user ? user.name : (s.profileName || '');
     var av = document.getElementById('editProfileAvatar');
+    // Prioritas: foto custom upload > foto Google > inisial
     var customPhoto = localStorage.getItem('auspotyCustomPhoto');
     if (av) {
-        // Saat ganti akun Google, hapus foto custom lama agar foto Google tampil
-        var photoSrc = (user && user.picture && !customPhoto) ? user.picture : (customPhoto || (user ? user.picture : null));
-        if (photoSrc) {
-            av.innerHTML = '<img src="' + photoSrc + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        if (customPhoto) {
+            av.innerHTML = '<img src="' + customPhoto + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        } else if (user && user.picture) {
+            av.innerHTML = '<img src="' + user.picture + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
         } else {
             av.innerHTML = '';
-            av.innerText = (s.profileName || 'A').charAt(0).toUpperCase();
+            av.innerText = (user ? user.name : (s.profileName || 'A')).charAt(0).toUpperCase();
         }
     }
     var modal = document.getElementById('editProfileModal');
@@ -905,9 +906,16 @@ function previewProfilePhoto(event) {
     reader.onload = function(e) {
         var dataUrl = e.target.result;
         localStorage.setItem('auspotyCustomPhoto', dataUrl);
-        var av = document.getElementById('editProfileAvatar');
-        if (av) av.innerHTML = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
-        updateProfileUI();
+        var imgTag = '<img src="' + dataUrl + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+        // Update avatar di modal edit profil
+        var editAv = document.getElementById('editProfileAvatar');
+        if (editAv) editAv.innerHTML = imgTag;
+        // Update avatar di settings
+        var settAv = document.getElementById('settingsAvatar');
+        if (settAv) settAv.innerHTML = imgTag;
+        // Update avatar di home header
+        var homeAv = document.querySelector('.app-avatar');
+        if (homeAv) homeAv.innerHTML = imgTag;
         showToast('Foto profil diperbarui!');
     };
     reader.readAsDataURL(file);
@@ -1013,13 +1021,14 @@ async function deleteComment(docId, videoId) {
     if (!confirm('Hapus komentar ini?')) return;
     try {
         const db_fs = window._firestoreDB;
-        const allSnap = await window._fsGetDocs(window._fsQuery(window._fsCollection(db_fs, 'comments'), window._fsWhere('videoId', '==', videoId)));
-        const target = allSnap.docs.find(d => d.id === docId);
-        if (target) {
-            await target.ref.delete();
-            showToast('Komentar dihapus');
-            loadComments(videoId);
-        } else { showToast('Komentar tidak ditemukan'); }
+        if (!db_fs || !window._fsDeleteDoc || !window._fsDoc) {
+            showToast('Firestore belum siap, coba lagi'); return;
+        }
+        // Firestore v9 modular: deleteDoc(doc(db, collection, id))
+        const docRef = window._fsDoc(db_fs, 'comments', docId);
+        await window._fsDeleteDoc(docRef);
+        showToast('Komentar dihapus');
+        loadComments(videoId);
     } catch(e) { showToast('Gagal hapus: ' + e.message); }
 }
 
@@ -1047,12 +1056,30 @@ function updateProfileUI() {
     const logoutBtn = document.getElementById('googleLogoutBtn');
     if (user) {
         const av = document.getElementById('settingsAvatar');
-        if (av) { if (user.picture) { av.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">'; } else { av.innerText = user.name.charAt(0).toUpperCase(); } }
+        if (av) {
+            const customPhoto = localStorage.getItem('auspotyCustomPhoto');
+            if (customPhoto) {
+                av.innerHTML = '<img src="'+customPhoto+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+            } else if (user.picture) {
+                av.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+            } else {
+                av.innerText = user.name.charAt(0).toUpperCase();
+            }
+        }
         const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = user.name;
         const psub = document.getElementById('settingsProfileSub'); if (psub) psub.innerText = user.email;
         const logoutSub = document.getElementById('googleLogoutSub'); if (logoutSub) logoutSub.innerText = user.email;
         const homeAv = document.querySelector('.app-avatar');
-        if (homeAv) { if (user.picture) { homeAv.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">'; } else { homeAv.innerText = user.name.charAt(0).toUpperCase(); } }
+        if (homeAv) {
+            const customPhotoH = localStorage.getItem('auspotyCustomPhoto');
+            if (customPhotoH) {
+                homeAv.innerHTML = '<img src="'+customPhotoH+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+            } else if (user.picture) {
+                homeAv.innerHTML = '<img src="'+user.picture+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+            } else {
+                homeAv.innerText = user.name.charAt(0).toUpperCase();
+            }
+        }
         if (loginBtn) loginBtn.style.display = 'none';
         if (logoutBtn) logoutBtn.style.display = 'block';
     } else {
