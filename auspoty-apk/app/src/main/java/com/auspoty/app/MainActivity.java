@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.PowerManager;
 import android.view.KeyEvent;
 import android.view.View;
 import android.webkit.WebChromeClient;
@@ -26,6 +27,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private Handler keepAliveHandler;
     private Runnable keepAliveRunnable;
+    private PowerManager.WakeLock webViewWakeLock;
     private static final int REQ_LOGIN = 102;
 
     private static final String APP_URL = "file:///android_asset/index.html";
@@ -80,6 +82,32 @@ public class MainActivity extends AppCompatActivity {
             }
             @android.webkit.JavascriptInterface
             public boolean isAndroid() { return true; }
+
+            // Dipanggil dari JS saat lagu mulai diputar
+            @android.webkit.JavascriptInterface
+            public void onMusicPlay(String title, String artist) {
+                // Acquire WakeLock agar layar/CPU tidak sleep
+                if (webViewWakeLock != null && !webViewWakeLock.isHeld()) {
+                    webViewWakeLock.acquire(4 * 60 * 60 * 1000L);
+                }
+                // Update foreground service dengan info lagu
+                Intent svc = new Intent(MainActivity.this, MusicService.class);
+                svc.putExtra(MusicService.EXTRA_TITLE, title != null ? title : "Auspoty");
+                svc.putExtra(MusicService.EXTRA_ARTIST, artist != null ? artist : "Sedang diputar...");
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(svc);
+                } else {
+                    startService(svc);
+                }
+            }
+
+            // Dipanggil dari JS saat lagu pause/stop
+            @android.webkit.JavascriptInterface
+            public void onMusicPause() {
+                if (webViewWakeLock != null && webViewWakeLock.isHeld()) {
+                    webViewWakeLock.release();
+                }
+            }
         }, "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
@@ -131,6 +159,16 @@ public class MainActivity extends AppCompatActivity {
 
         webView.loadUrl(APP_URL);
 
+        // WakeLock untuk WebView — cegah CPU sleep saat musik background
+        PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+        if (pm != null) {
+            webViewWakeLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "Auspoty::WebViewWakeLock"
+            );
+            webViewWakeLock.setReferenceCounted(false);
+        }
+
         // Keep-alive: ping WebView setiap 5 detik supaya tidak di-throttle saat background
         keepAliveHandler = new Handler();
         keepAliveRunnable = new Runnable() {
@@ -174,12 +212,14 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
         // JANGAN panggil webView.onPause() atau webView.pauseTimers()
         // supaya YouTube player tidak berhenti saat background
+        // WebView tetap aktif, WakeLock menjaga CPU tetap jalan
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         if (keepAliveHandler != null) keepAliveHandler.removeCallbacks(keepAliveRunnable);
+        if (webViewWakeLock != null && webViewWakeLock.isHeld()) webViewWakeLock.release();
         stopService(new Intent(this, MusicService.class));
         webView.destroy();
     }

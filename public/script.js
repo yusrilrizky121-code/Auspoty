@@ -9,6 +9,98 @@ window.addEventListener('beforeinstallprompt', (e) => {
     if (btn) { btn.style.display = 'flex'; btn.addEventListener('click', async () => { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') btn.style.display = 'none'; deferredPrompt = null; }); }
 });
 
+// ============================================================
+// BACKGROUND AUDIO KEEP-ALIVE
+// Mencegah browser throttle tab saat minimize / layar mati
+// ============================================================
+(function() {
+    // 1. Silent AudioContext oscillator — mencegah browser suspend audio
+    var _audioCtx = null;
+    var _silentNode = null;
+    function startSilentAudio() {
+        try {
+            if (_audioCtx && _audioCtx.state !== 'closed') return;
+            _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            var oscillator = _audioCtx.createOscillator();
+            var gainNode = _audioCtx.createGain();
+            gainNode.gain.value = 0.001; // hampir tidak terdengar
+            oscillator.connect(gainNode);
+            gainNode.connect(_audioCtx.destination);
+            oscillator.start();
+            _silentNode = oscillator;
+        } catch(e) {}
+    }
+
+    // 2. Screen Wake Lock API — cegah layar/CPU sleep saat musik jalan
+    var _wakeLock = null;
+    async function requestWakeLock() {
+        if ('wakeLock' in navigator) {
+            try {
+                _wakeLock = await navigator.wakeLock.request('screen');
+            } catch(e) {}
+        }
+    }
+    async function releaseWakeLock() {
+        if (_wakeLock) { try { await _wakeLock.release(); } catch(e) {} _wakeLock = null; }
+    }
+
+    // 3. Saat tab tersembunyi, aktifkan keep-alive
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            startSilentAudio();
+            // Resume AudioContext jika suspended
+            if (_audioCtx && _audioCtx.state === 'suspended') {
+                _audioCtx.resume().catch(function(){});
+            }
+        } else {
+            // Tab kembali aktif — resume AudioContext
+            if (_audioCtx && _audioCtx.state === 'suspended') {
+                _audioCtx.resume().catch(function(){});
+            }
+        }
+    });
+
+    // 4. Saat musik mulai diputar, aktifkan wake lock
+    window._bgAudio = {
+        onPlay: function() {
+            startSilentAudio();
+            requestWakeLock();
+            if (_audioCtx && _audioCtx.state === 'suspended') {
+                _audioCtx.resume().catch(function(){});
+            }
+        },
+        onPause: function() {
+            releaseWakeLock();
+        }
+    };
+
+    // 5. Re-acquire wake lock saat visibility berubah kembali ke visible
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden && _wakeLock === null) {
+            // Cek apakah lagu sedang main
+            if (typeof isPlaying !== 'undefined' && isPlaying) {
+                requestWakeLock();
+            }
+        }
+    });
+})();
+
+
+
+
+// Service Worker keep-alive ping — cegah SW di-terminate browser saat background
+(function() {
+    function pingSW() {
+        if (!navigator.serviceWorker || !navigator.serviceWorker.controller) return;
+        var mc = new MessageChannel();
+        navigator.serviceWorker.controller.postMessage({ type: 'KEEP_ALIVE' }, [mc.port2]);
+    }
+    // Ping setiap 20 detik saat musik sedang main
+    setInterval(function() {
+        if (typeof isPlaying !== 'undefined' && isPlaying) pingSW();
+    }, 20000);
+})();
+
 // INDEXEDDB
 let db;
 const dbReq = indexedDB.open('AuspotyDB', 1);
@@ -41,12 +133,19 @@ function onPlayerStateChange(event) {
         if (mainBtn) mainBtn.innerHTML = '<path d="' + pausePath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
         startProgressBar();
+        if (window._bgAudio) window._bgAudio.onPlay();
+        // Beritahu APK agar aktifkan WakeLock + update notifikasi
+        if (window.AndroidBridge && currentTrack) {
+            try { window.AndroidBridge.onMusicPlay(currentTrack.title || 'Auspoty', currentTrack.artist || ''); } catch(e) {}
+        }
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
         stopProgressBar();
+        if (window._bgAudio) window._bgAudio.onPause();
+        if (window.AndroidBridge) { try { window.AndroidBridge.onMusicPause(); } catch(e) {} }
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
