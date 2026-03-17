@@ -469,33 +469,11 @@
         <div style="font-size:44px;margin-bottom:10px;">🎵</div>
         <h2 style="color:white;font-size:22px;font-weight:700;margin-bottom:6px;">Masuk ke Auspoty</h2>
         <p style="color:rgba(255,255,255,0.55);font-size:13px;margin-bottom:24px;line-height:1.5;">Login untuk menyimpan playlist<br>dan lagu favorit kamu</p>
-        <!-- Google Sign-In Button container -->
+        <!-- Google Sign-In Button container (untuk web) -->
         <div id="googleSignInBtn" style="display:flex;justify-content:center;min-height:44px;margin-bottom:12px;"></div>
-        <!-- Fallback jika Client ID belum diset -->
-        <div id="loginSetupInfo" style="display:none;background:rgba(255,255,255,0.05);border-radius:12px;padding:16px;text-align:left;margin-bottom:16px;">
-            <p style="color:#ffd700;font-size:12px;font-weight:700;margin-bottom:8px;">⚙️ Setup diperlukan</p>
-            <p style="color:rgba(255,255,255,0.6);font-size:11px;line-height:1.6;margin-bottom:8px;">Untuk mengaktifkan login Google, buat Client ID di Google Cloud Console lalu ganti <code style="color:#1ed760;">GOOGLE_CLIENT_ID</code> di script.js</p>
-            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#1ed760;font-size:11px;text-decoration:none;">→ Buka Google Cloud Console</a>
-        </div>
         <button onclick="closeLoginModal()" style="background:transparent;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.5);padding:10px 28px;border-radius:20px;font-size:13px;cursor:pointer;width:100%;">Nanti saja</button>
     </div>
 </div>
-
-<script>
-// Tampilkan info setup jika Client ID belum diset
-document.addEventListener('DOMContentLoaded', function() {
-    // Cek apakah Google GSI sudah load
-    function checkGoogleReady() {
-        const info = document.getElementById('loginSetupInfo');
-        const btnContainer = document.getElementById('googleSignInBtn');
-        if (typeof GOOGLE_CLIENT_ID !== 'undefined' && GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') {
-            if (info) info.style.display = 'block';
-            if (btnContainer) btnContainer.innerHTML = '<div style="color:rgba(255,255,255,0.3);font-size:12px;padding:10px;">Google Sign-In belum dikonfigurasi</div>';
-        }
-    }
-    setTimeout(checkGoogleReady, 500);
-});
-</script>
 
 </body>
 </html>
