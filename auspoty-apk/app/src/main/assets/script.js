@@ -1,6 +1,4 @@
-﻿// APK VERSION
-const API_BASE = "https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
-
+﻿const API_BASE = 'https://clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app';
 // PWA
 let deferredPrompt;
 if ('serviceWorker' in navigator) {
@@ -174,7 +172,7 @@ async function openLyricsModal() {
     lyricsLines = [];
     currentHighlightIdx = -1;
     try {
-        const res = await fetch(`${API_BASE}/api/lyrics?video_id=` + currentTrack.videoId);
+        const res = await fetch(`${API_BASE}/api/lyrics?video_id=${currentTrack.videoId}`);
         const result = await res.json();
         if (result.status === 'success' && result.data && result.data.lines && result.data.lines.length > 0) {
             lyricsLines = result.data.lines;
@@ -561,3 +559,4 @@ function addTrackToPlaylist(id) {
 }
 
 window.onload = () => { loadHomeData(); renderSearchCategories(); };
+
