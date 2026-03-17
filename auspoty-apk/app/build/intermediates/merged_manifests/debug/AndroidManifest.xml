@@ -50,6 +50,12 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <activity
+            android:name="com.auspoty.app.LoginActivity"
+            android:configChanges="orientation|screenSize"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
+
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="com.auspoty.app.androidx-startup"

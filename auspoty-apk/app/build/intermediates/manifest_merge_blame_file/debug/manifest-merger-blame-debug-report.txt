@@ -33,7 +33,7 @@
 20-->[androidx.core:core:1.9.0] C:\Users\Admin\.gradle\caches\transforms-3\f0f4ee7c3b88100b2d2cd4b05ab423cd\transformed\core-1.9.0\AndroidManifest.xml:26:22-94
 21
 22    <application
-22-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:9:5-37:19
+22-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:9:5-43:19
 23        android:allowAudioPlaybackCapture="true"
 23-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:17:9-49
 24        android:allowBackup="true"
@@ -89,27 +89,38 @@
 51            android:foregroundServiceType="mediaPlayback" />
 51-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:35:13-58
 52
-53        <provider
-53-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
-54            android:name="androidx.startup.InitializationProvider"
-54-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
-55            android:authorities="com.auspoty.app.androidx-startup"
-55-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
-56            android:exported="false" >
-56-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
-57            <meta-data
-57-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
-58                android:name="androidx.emoji2.text.EmojiCompatInitializer"
-58-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
-59                android:value="androidx.startup" />
-59-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
-60            <meta-data
-60-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
-61                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-61-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
-62                android:value="androidx.startup" />
-62-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
-63        </provider>
-64    </application>
-65
-66</manifest>
+53        <activity
+53-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:37:9-41:58
+54            android:name="com.auspoty.app.LoginActivity"
+54-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:38:13-42
+55            android:configChanges="orientation|screenSize"
+55-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:40:13-59
+56            android:exported="false"
+56-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:39:13-37
+57            android:windowSoftInputMode="adjustResize" />
+57-->C:\Users\Admin\Downloads\Auspoty\auspoty-apk\app\src\main\AndroidManifest.xml:41:13-55
+58
+59        <provider
+59-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:24:9-32:20
+60            android:name="androidx.startup.InitializationProvider"
+60-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:25:13-67
+61            android:authorities="com.auspoty.app.androidx-startup"
+61-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:26:13-68
+62            android:exported="false" >
+62-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:27:13-37
+63            <meta-data
+63-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:29:13-31:52
+64                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+64-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:30:17-75
+65                android:value="androidx.startup" />
+65-->[androidx.emoji2:emoji2:1.2.0] C:\Users\Admin\.gradle\caches\transforms-3\4ef2d37eca9ad04b2c397a091ea18fe4\transformed\jetified-emoji2-1.2.0\AndroidManifest.xml:31:17-49
+66            <meta-data
+66-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:31:13-33:52
+67                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+67-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:32:17-78
+68                android:value="androidx.startup" />
+68-->[androidx.lifecycle:lifecycle-process:2.4.1] C:\Users\Admin\.gradle\caches\transforms-3\a4c8d0ec904ebc7ffc6031b8d3671ae8\transformed\jetified-lifecycle-process-2.4.1\AndroidManifest.xml:33:17-49
+69        </provider>
+70    </application>
+71
+72</manifest>

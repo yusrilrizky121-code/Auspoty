@@ -732,6 +732,8 @@ id line1
 id line3
 id listMode
 id list_item
+id loginProgress
+id loginWebView
 id message
 id middle
 id multiply
@@ -854,6 +856,7 @@ layout abc_search_dropdown_item_icons_2line
 layout abc_search_view
 layout abc_select_dialog_material
 layout abc_tooltip
+layout activity_login
 layout activity_main
 layout custom_dialog
 layout notification_action

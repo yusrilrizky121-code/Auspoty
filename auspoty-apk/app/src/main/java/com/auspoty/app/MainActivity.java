@@ -1,10 +1,9 @@
 package com.auspoty.app;
 
-import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
-import android.content.pm.PackageManager;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,8 +17,6 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.ProgressBar;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 public class MainActivity extends AppCompatActivity {
@@ -29,7 +26,7 @@ public class MainActivity extends AppCompatActivity {
     private ProgressBar progressBar;
     private Handler keepAliveHandler;
     private Runnable keepAliveRunnable;
-    private static final int REQ_ACCOUNTS = 101;
+    private static final int REQ_LOGIN = 102;
 
     private static final String APP_URL = "file:///android_asset/index.html";
     private static final String API_HOST = "clone2-iyrr-git-master-yusrilrizky121-codes-projects.vercel.app";
@@ -57,8 +54,33 @@ public class MainActivity extends AppCompatActivity {
         settings.setAllowFileAccessFromFileURLs(true);
         settings.setUserAgentString(settings.getUserAgentString() + " AuspotyApp/1.0");
 
-        // Daftarkan Android Bridge untuk login Google via AccountManager
-        webView.addJavascriptInterface(new GoogleLoginBridge(this, webView), "AndroidBridge");
+        // Daftarkan Android Bridge — buka LoginActivity saat user klik login
+        webView.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void openGoogleLogin() {
+                Intent intent = new Intent(MainActivity.this, LoginActivity.class);
+                startActivityForResult(intent, REQ_LOGIN);
+            }
+            @android.webkit.JavascriptInterface
+            public boolean isLoggedIn() {
+                SharedPreferences prefs = getSharedPreferences("auspoty_login", MODE_PRIVATE);
+                return prefs.getBoolean("isLoggedIn", false);
+            }
+            @android.webkit.JavascriptInterface
+            public String getAccountName() {
+                SharedPreferences prefs = getSharedPreferences("auspoty_login", MODE_PRIVATE);
+                return prefs.getString("accountName", "");
+            }
+            @android.webkit.JavascriptInterface
+            public void logout() {
+                SharedPreferences prefs = getSharedPreferences("auspoty_login", MODE_PRIVATE);
+                prefs.edit().clear().apply();
+                runOnUiThread(() -> webView.evaluateJavascript(
+                    "localStorage.removeItem('auspotyGoogleUser'); if(typeof updateProfileUI==='function') updateProfileUI();", null));
+            }
+            @android.webkit.JavascriptInterface
+            public boolean isAndroid() { return true; }
+        }, "AndroidBridge");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -136,14 +158,6 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         webView.onResume();
         webView.resumeTimers();
-        // Minta permission GET_ACCOUNTS untuk login Google via AccountManager
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.GET_ACCOUNTS)
-                    != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this,
-                        new String[]{Manifest.permission.GET_ACCOUNTS}, REQ_ACCOUNTS);
-            }
-        }
         // Start foreground service supaya musik tetap jalan di background
         Intent serviceIntent = new Intent(this, MusicService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -168,5 +182,27 @@ public class MainActivity extends AppCompatActivity {
         if (keepAliveHandler != null) keepAliveHandler.removeCallbacks(keepAliveRunnable);
         stopService(new Intent(this, MusicService.class));
         webView.destroy();
+    }
+
+    // Terima hasil dari LoginActivity
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_LOGIN && resultCode == RESULT_OK && data != null) {
+            String accountName = data.getStringExtra("accountName");
+            if (accountName == null) accountName = "Pengguna Google";
+            final String name = accountName;
+            final String email = name.contains("@") ? name : name + "@gmail.com";
+            // Inject user data ke localStorage WebView
+            webView.evaluateJavascript(
+                "(function(){" +
+                "var user={name:'" + name.replace("'", "\\'") + "'," +
+                "email:'" + email.replace("'", "\\'") + "'," +
+                "picture:'',sub:'" + email.replace("'", "\\'") + "'};" +
+                "localStorage.setItem('auspotyGoogleUser',JSON.stringify(user));" +
+                "if(typeof updateProfileUI==='function') updateProfileUI();" +
+                "if(typeof showToast==='function') showToast('Selamat datang, " + name.replace("'", "\\'") + "!');" +
+                "})()", null);
+        }
     }
 }
