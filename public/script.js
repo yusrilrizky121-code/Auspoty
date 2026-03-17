@@ -728,11 +728,11 @@ async function loadComments(videoId) {
     try {
         const db_fs = window._firestoreDB;
         if (!db_fs) { list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Firestore belum aktif.</div>'; return; }
-        const q = window._fsQuery(window._fsCollection(db_fs,'comments'),window._fsWhere('videoId','==',videoId),window._fsOrderBy('createdAt','desc'));
+        const q = window._fsQuery(window._fsCollection(db_fs,'comments'),window._fsWhere('videoId','==',videoId));
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Belum ada komentar. Jadilah yang pertama!</div>'; return; }
-        list.innerHTML = snap.docs.map(doc => {
-            const d = doc.data();
+        const docs = snap.docs.map(d=>d.data()).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        list.innerHTML = docs.map(d => {
             const time = d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
             return '<div style="display:flex;gap:10px;align-items:flex-start;"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">'+(d.picture?'<img src="'+d.picture+'" style="width:100%;height:100%;object-fit:cover;">':d.name.charAt(0).toUpperCase())+'</div><div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;"><div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="font-size:13px;font-weight:700;color:var(--accent);">'+d.name+'</span><span style="font-size:11px;color:var(--text-sub);">'+time+'</span></div><p style="font-size:14px;color:white;line-height:1.5;margin:0;">'+d.text+'</p></div></div>';
         }).join('');
