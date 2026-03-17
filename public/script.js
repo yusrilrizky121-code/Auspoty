@@ -238,6 +238,57 @@ function renderArtistCard(name) {
 }
 
 // HOME DATA
+const HOME_QUERIES_BY_LANG = {
+    Indonesia: [
+        { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
+        { id: 'rowGembira', query: 'lagu semangat gembira indonesia' },
+        { id: 'rowCharts',  query: 'top hits indonesia 2025' },
+        { id: 'rowGalau',   query: 'lagu galau sedih indonesia' },
+        { id: 'rowTiktok',  query: 'viral tiktok indonesia 2025' },
+        { id: 'rowHits',    query: 'lagu hits hari ini indonesia' },
+    ],
+    English: [
+        { id: 'rowAnyar',   query: 'new english songs 2025' },
+        { id: 'rowGembira', query: 'happy upbeat english songs' },
+        { id: 'rowCharts',  query: 'top hits billboard 2025' },
+        { id: 'rowGalau',   query: 'sad english songs' },
+        { id: 'rowTiktok',  query: 'viral tiktok songs 2025' },
+        { id: 'rowHits',    query: 'trending songs today' },
+    ],
+    Japanese: [
+        { id: 'rowAnyar',   query: 'japanese new songs 2025' },
+        { id: 'rowGembira', query: 'japanese happy songs' },
+        { id: 'rowCharts',  query: 'japan top hits 2025' },
+        { id: 'rowGalau',   query: 'japanese sad songs' },
+        { id: 'rowTiktok',  query: 'japan viral tiktok 2025' },
+        { id: 'rowHits',    query: 'japanese trending songs' },
+    ],
+    Korean: [
+        { id: 'rowAnyar',   query: 'kpop new songs 2025' },
+        { id: 'rowGembira', query: 'kpop happy songs' },
+        { id: 'rowCharts',  query: 'kpop top hits 2025' },
+        { id: 'rowGalau',   query: 'kpop sad songs' },
+        { id: 'rowTiktok',  query: 'kpop viral tiktok 2025' },
+        { id: 'rowHits',    query: 'kpop trending today' },
+    ],
+};
+const SECTION_TITLES_BY_LANG = {
+    Indonesia: ['Sering kamu dengarkan','Rilis Anyar','Gembira & Semangat','Tangga Lagu Populer','Galau Terpopuler','Viral TikTok','Artis Terpopuler','Hit Hari Ini'],
+    English:   ['Recently Played','New Releases','Happy & Energetic','Top Charts','Sad Songs','Viral TikTok','Popular Artists','Hits Today'],
+    Japanese:  ['最近再生','新着リリース','元気な曲','人気チャート','悲しい曲','バイラルTikTok','人気アーティスト','今日のヒット'],
+    Korean:    ['최근 재생','신규 발매','신나는 노래','인기 차트','슬픈 노래','바이럴 틱톡','인기 아티스트','오늘의 히트'],
+};
+function getHomeQueries() {
+    const lang = getSettings().language || 'Indonesia';
+    return HOME_QUERIES_BY_LANG[lang] || HOME_QUERIES_BY_LANG.Indonesia;
+}
+function applyLanguageTitles() {
+    const lang = getSettings().language || 'Indonesia';
+    const titles = SECTION_TITLES_BY_LANG[lang] || SECTION_TITLES_BY_LANG.Indonesia;
+    const titleEls = document.querySelectorAll('.section-title');
+    const titleMap = ['Sering','Rilis','Gembira','Tangga','Galau','Viral','Artis','Hit'];
+    titleEls.forEach((el, i) => { if (titles[i]) el.innerText = titles[i]; });
+}
 const HOME_QUERIES = [
     { id: 'rowAnyar',   query: 'lagu indonesia terbaru 2025' },
     { id: 'rowGembira', query: 'lagu semangat gembira indonesia' },
@@ -260,7 +311,8 @@ async function loadHomeData() {
     }
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
-    for (const row of HOME_QUERIES) {
+    applyLanguageTitles();
+    for (const row of getHomeQueries()) {
         const el = document.getElementById(row.id);
         if (!el) continue;
         el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Memuat...</div>';
@@ -525,8 +577,14 @@ function applyAllSettings() {
     document.documentElement.style.setProperty('--spotify-green', t.g);
     document.documentElement.style.setProperty('--spotify-green-dark', t.g);
 
-    const sizes = { small: '14px', normal: '16px', large: '18px', xlarge: '20px' };
-    document.documentElement.style.setProperty('--base-font-size', sizes[s.fontSize] || '16px');
+    const sizes = { small: '13px', normal: '15px', large: '17px', xlarge: '20px' };
+    const sz = sizes[s.fontSize] || '15px';
+    document.documentElement.style.setProperty('--base-font-size', sz);
+    document.body.style.fontSize = sz;
+    // Apply ke semua elemen teks utama
+    document.querySelectorAll('.v-title,.h-title,.player-title,.settings-item-title,.lib-item-title').forEach(el => {
+        el.style.fontSize = '';
+    });
 
     const themeNames = { green: 'Ungu-Pink (Default)', blue: 'Biru-Indigo', red: 'Merah-Oranye', purple: 'Ungu-Magenta', orange: 'Oranye-Kuning' };
     const el = document.getElementById('themeLabel'); if (el) el.innerText = themeNames[s.theme] || 'Ungu-Pink (Default)';
@@ -614,7 +672,7 @@ function openLanguagePicker() {
         { label: 'English', value: 'English' },
         { label: 'Japanese', value: 'Japanese' },
         { label: 'Korean', value: 'Korean' },
-    ], s.language || 'Indonesia', (val) => { saveSettings({ language: val }); applyAllSettings(); });
+    ], s.language || 'Indonesia', (val) => { saveSettings({ language: val }); applyAllSettings(); loadHomeData(); });
 }
 function openRegionPicker() {
     const s = getSettings();
@@ -624,7 +682,7 @@ function openRegionPicker() {
         { label: 'Amerika Serikat', value: 'Amerika Serikat' },
         { label: 'Jepang', value: 'Jepang' },
         { label: 'Korea', value: 'Korea' },
-    ], s.region || 'Indonesia', (val) => { saveSettings({ region: val }); applyAllSettings(); });
+    ], s.region || 'Indonesia', (val) => { saveSettings({ region: val }); applyAllSettings(); loadHomeData(); });
 }
 
 // EDIT PROFILE
