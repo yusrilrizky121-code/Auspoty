@@ -652,11 +652,37 @@ function clearLikedSongs() {
 
 
 // DOWNLOAD
-function downloadMusic() {
+async function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    var dlUrl = 'https://id.ytmp3.mobi/v1/#' + currentTrack.videoId;
-    window.open(dlUrl, '_blank');
-    showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
+    const btn = document.getElementById('downloadBtn');
+    const btnMini = document.getElementById('downloadBtnMini');
+    [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '0.4'; b.style.pointerEvents = 'none'; } });
+    showToast('Menyiapkan MP3... tunggu sebentar');
+    try {
+        const API = (typeof API_BASE !== 'undefined') ? API_BASE : '';
+        const res = await fetch(API + '/api/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ videoId: currentTrack.videoId, title: currentTrack.title })
+        });
+        const result = await res.json();
+        if (result.status === 'success' && result.url) {
+            const a = document.createElement('a');
+            a.href = result.url;
+            a.download = (result.title || currentTrack.title).replace(/[\/:*?"<>|]/g, '_') + '.mp3';
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => document.body.removeChild(a), 1000);
+            showToast('Download MP3 dimulai!');
+        } else {
+            showToast('Gagal: ' + (result.message || 'Coba lagi'));
+        }
+    } catch (e) {
+        showToast('Gagal koneksi ke server');
+    } finally {
+        [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '1'; b.style.pointerEvents = ''; } });
+    }
 }
 
 
