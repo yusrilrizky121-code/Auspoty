@@ -707,7 +707,8 @@ function openEditProfile() {
     var av = document.getElementById('editProfileAvatar');
     var customPhoto = localStorage.getItem('auspotyCustomPhoto');
     if (av) {
-        var photoSrc = customPhoto || (user ? user.picture : null);
+        // Saat ganti akun Google, hapus foto custom lama agar foto Google tampil
+        var photoSrc = (user && user.picture && !customPhoto) ? user.picture : (customPhoto || (user ? user.picture : null));
         if (photoSrc) {
             av.innerHTML = '<img src="' + photoSrc + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
         } else {
@@ -802,12 +803,15 @@ async function loadComments(videoId) {
         const q = window._fsQuery(window._fsCollection(db_fs,'comments'),window._fsWhere('videoId','==',videoId));
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Belum ada komentar. Jadilah yang pertama!</div>'; return; }
-        const docs = snap.docs.map(d=>d.data()).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        const docs = snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0));
+        const currentUser = getGoogleUser();
+        const isCurrentAdmin = currentUser && currentUser.email === 'yusrilrizky149@gmail.com';
         list.innerHTML = docs.map(d => {
             const time = d.createdAt ? new Date(d.createdAt.seconds*1000).toLocaleDateString('id-ID',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
             const isAdmin = d.email === 'yusrilrizky149@gmail.com';
             const badge = isAdmin ? '<span style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;font-size:10px;font-weight:800;padding:2px 7px;border-radius:8px;margin-left:6px;letter-spacing:.5px;">ADMIN</span>' : '<span style="background:rgba(255,255,255,0.1);color:var(--text-sub);font-size:10px;font-weight:600;padding:2px 7px;border-radius:8px;margin-left:6px;">Pengguna</span>';
-            return '<div style="display:flex;gap:10px;align-items:flex-start;"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">'+(d.picture?'<img src="'+d.picture+'" style="width:100%;height:100%;object-fit:cover;">':d.name.charAt(0).toUpperCase())+'</div><div style="flex:1;background:'+(isAdmin?'rgba(245,158,11,0.08)':'rgba(255,255,255,0.06)')+';border-radius:12px;padding:10px 14px;border:'+(isAdmin?'1px solid rgba(245,158,11,0.3)':'1px solid transparent')+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><div style="display:flex;align-items:center;"><span style="font-size:13px;font-weight:700;color:'+(isAdmin?'#f59e0b':'var(--accent)')+';">'+d.name+'</span>'+badge+'</div><span style="font-size:11px;color:var(--text-sub);">'+time+'</span></div><p style="font-size:14px;color:white;line-height:1.5;margin:0;">'+d.text+'</p></div></div>';
+            const deleteBtn = isCurrentAdmin ? '<button onclick="deleteComment(\'' + d.id + '\',\'' + videoId + '\')" style="background:rgba(255,82,82,0.15);border:none;color:#ff5252;font-size:11px;padding:3px 8px;border-radius:6px;cursor:pointer;margin-left:6px;">Hapus</button>' : '';
+            return '<div style="display:flex;gap:10px;align-items:flex-start;"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">'+(d.picture?'<img src="'+d.picture+'" style="width:100%;height:100%;object-fit:cover;">':d.name.charAt(0).toUpperCase())+'</div><div style="flex:1;background:'+(isAdmin?'rgba(245,158,11,0.08)':'rgba(255,255,255,0.06)')+';border-radius:12px;padding:10px 14px;border:'+(isAdmin?'1px solid rgba(245,158,11,0.3)':'1px solid transparent')+'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;"><div style="display:flex;align-items:center;"><span style="font-size:13px;font-weight:700;color:'+(isAdmin?'#f59e0b':'var(--accent)')+';">'+d.name+'</span>'+badge+deleteBtn+'</div><span style="font-size:11px;color:var(--text-sub);">'+time+'</span></div><p style="font-size:14px;color:white;line-height:1.5;margin:0;">'+d.text+'</p></div></div>';
         }).join('');
     } catch(e) { list.innerHTML = '<div style="color:#ff5252;text-align:center;padding:20px;font-size:13px;">Gagal: '+e.message+'</div>'; }
 }
@@ -833,6 +837,36 @@ function downloadMusic() {
     showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
 }
 
+// DELETE COMMENT (admin only)
+async function deleteComment(docId, videoId) {
+    const user = getGoogleUser();
+    if (!user || user.email !== 'yusrilrizky149@gmail.com') { showToast('Hanya admin yang bisa menghapus'); return; }
+    if (!confirm('Hapus komentar ini?')) return;
+    try {
+        const db_fs = window._firestoreDB;
+        const allSnap = await window._fsGetDocs(window._fsQuery(window._fsCollection(db_fs, 'comments'), window._fsWhere('videoId', '==', videoId)));
+        const target = allSnap.docs.find(d => d.id === docId);
+        if (target) {
+            await target.ref.delete();
+            showToast('Komentar dihapus');
+            loadComments(videoId);
+        } else { showToast('Komentar tidak ditemukan'); }
+    } catch(e) { showToast('Gagal hapus: ' + e.message); }
+}
+
+// HISTORY VIEW
+function openHistoryView() {
+    const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
+    const container = document.getElementById('libraryContainer');
+    if (!container) return;
+    const backBtn = '<div style="padding:0 16px 8px;"><button onclick="renderLibraryUI()" style="background:rgba(255,255,255,0.1);border:none;color:white;padding:8px 16px;border-radius:20px;font-size:13px;cursor:pointer;">← Kembali ke Koleksi</button></div>';
+    if (history.length === 0) {
+        container.innerHTML = backBtn + '<div style="color:var(--text-sub);padding:20px;text-align:center;font-size:14px;">Belum ada riwayat putar.</div>';
+        return;
+    }
+    container.innerHTML = backBtn + history.slice(0, 30).map(t => renderVItem(t)).join('');
+}
+
 // INIT
 applyAllSettings();
 loadHomeData();
@@ -853,7 +887,16 @@ function updateProfileUI() {
         if (loginBtn) loginBtn.style.display = 'none';
         if (logoutBtn) logoutBtn.style.display = 'block';
     } else {
-        const av = document.getElementById('settingsAvatar'); if (av) av.innerText = (s.profileName||'A').charAt(0).toUpperCase();
+        const av = document.getElementById('settingsAvatar');
+        if (av) {
+            const customPhoto = localStorage.getItem('auspotyCustomPhoto');
+            if (customPhoto) {
+                av.innerHTML = '<img src="'+customPhoto+'" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+            } else {
+                av.innerHTML = '';
+                av.innerText = (s.profileName||'A').charAt(0).toUpperCase();
+            }
+        }
         const pname = document.getElementById('settingsProfileName'); if (pname) pname.innerText = s.profileName||'Pengguna Auspoty';
         const psub = document.getElementById('settingsProfileSub'); if (psub) psub.innerText = 'Auspoty Premium';
         if (loginBtn) loginBtn.style.display = 'block';
