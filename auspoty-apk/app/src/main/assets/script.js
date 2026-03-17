@@ -657,35 +657,45 @@ async function downloadMusic() {
     if (!currentTrack) return;
     const btn = document.getElementById('downloadBtn');
     const btnMini = document.getElementById('downloadBtnMini');
-    const title = currentTrack.title || 'lagu';
+    const title = (currentTrack.title || 'lagu').replace(/[^a-zA-Z0-9 ]/g, '').trim();
+
+    // Set loading state
+    [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '0.4'; b.style.pointerEvents = 'none'; } });
     showToast('Menyiapkan download...');
-    if (btn) { btn.setAttribute('disabled', '1'); btn.style.opacity = '0.5'; }
-    if (btnMini) { btnMini.setAttribute('disabled', '1'); btnMini.style.opacity = '0.5'; }
+
     try {
         const res = await fetch(API_BASE + '/api/download', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ videoId: currentTrack.videoId })
         });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showToast('Server error: ' + (err.message || res.status));
+            return;
+        }
+
         const result = await res.json();
+
         if (result.status === 'success' && result.url) {
-            showToast('Mengunduh ' + title + '...');
+            showToast('Download dimulai: ' + (title || 'lagu'));
+            // Buka URL download di tab baru — browser/HP akan handle save file
             const a = document.createElement('a');
             a.href = result.url;
-            a.download = title.replace(/[^a-zA-Z0-9 ]/g, '') + '.mp3';
+            a.download = (title || 'lagu') + '.mp3';
+            a.rel = 'noopener';
             a.target = '_blank';
             document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
-            setTimeout(() => showToast('Download dimulai!'), 800);
+            setTimeout(() => document.body.removeChild(a), 1000);
         } else {
-            showToast('Gagal: ' + (result.message || 'Coba lagi'));
+            showToast('Gagal: ' + (result.message || 'Server tidak merespons'));
         }
     } catch (e) {
-        showToast('Gagal download. Cek koneksi.');
+        showToast('Gagal koneksi ke server download');
     } finally {
-        if (btn) { btn.removeAttribute('disabled'); btn.style.opacity = '1'; }
-        if (btnMini) { btnMini.removeAttribute('disabled'); btnMini.style.opacity = '1'; }
+        [btn, btnMini].forEach(b => { if (b) { b.style.opacity = '1'; b.style.pointerEvents = ''; } });
     }
 }
 
