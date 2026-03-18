@@ -264,7 +264,12 @@ function getHighResImage(url) {
 }
 function playMusic(videoId, encodedData) {
     currentTrack = JSON.parse(decodeURIComponent(encodedData));
+    window.currentTrack = currentTrack;
     checkIfLiked(currentTrack.videoId); updateMediaSession();
+    // Notify Flutter untuk background audio
+    if (window.AndroidBridge && typeof window.AndroidBridge.onMusicPlay === 'function') {
+        window.AndroidBridge.onMusicPlay(currentTrack.title, currentTrack.artist);
+    }
     document.getElementById('miniPlayer').style.display = 'flex';
     document.getElementById('miniPlayerImg').src = currentTrack.img;
     document.getElementById('miniPlayerTitle').innerText = currentTrack.title;
@@ -1200,8 +1205,14 @@ async function submitComment() {
 // DOWNLOAD
 function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    window.open('https://id.ytmp3.mobi/v1/#' + currentTrack.videoId, '_blank');
-    showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
+    const url = 'https://id.ytmp3.mobi/v1/#' + currentTrack.videoId;
+    if (window.AndroidBridge && typeof window.AndroidBridge.openDownload === 'function') {
+        window.AndroidBridge.openDownload(url);
+        showToast('Membuka download di browser...');
+    } else {
+        window.open(url, '_blank');
+        showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
+    }
 }
 
 // DELETE COMMENT (admin only)
