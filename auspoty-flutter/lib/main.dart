@@ -440,11 +440,25 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
         }
       };
-      window.downloadMusic = function(){
-        if(!window.currentTrack){ if(typeof showToast==='function') showToast('Putar lagu dulu!'); return; }
-        window.AndroidBridge.openDownload('https://id.ytmp3.mobi/v1/#'+window.currentTrack.videoId);
-        if(typeof showToast==='function') showToast('Membuka halaman download...');
-      };
+
+      // Inject AudioContext keep-alive — paksa browser tetap aktif di background
+      // Ini trick standar untuk background audio di WebView Android
+      (function(){
+        if(window._auspotyKeepAlive) return;
+        window._auspotyKeepAlive = true;
+        try {
+          var ctx = new (window.AudioContext || window.webkitAudioContext)();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          gain.gain.value = 0.00001; // volume hampir 0, tidak terdengar
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start();
+          window._keepAliveCtx = ctx;
+          console.log('AudioContext keep-alive aktif');
+        } catch(e) { console.log('AudioContext keep-alive gagal:', e); }
+      })();
+
       console.log('Auspoty bridge v3.0 ready');
     ''');
   }

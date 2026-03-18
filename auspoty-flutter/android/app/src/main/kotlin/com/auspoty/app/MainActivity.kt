@@ -20,16 +20,7 @@ class MainActivity : FlutterActivity() {
                 "startMusicService" -> {
                     val title = call.argument<String>("title") ?: "Auspoty"
                     val artist = call.argument<String>("artist") ?: ""
-                    val intent = Intent(this, MusicForegroundService::class.java).apply {
-                        putExtra("title", title)
-                        putExtra("artist", artist)
-                        action = "START"
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
-                    } else {
-                        startService(intent)
-                    }
+                    startMusicService(title, artist)
                     result.success(null)
                 }
                 "stopMusicService" -> {
@@ -43,22 +34,21 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Aktifkan WebView debugging (opsional, bisa dihapus di production)
         WebView.setWebContentsDebuggingEnabled(false)
-        
-        // Start foreground service langsung saat app buka
+        // Start foreground service dari awal supaya audio bisa jalan di background
         startMusicService("Auspoty", "Siap memutar musik")
     }
 
     override fun onPause() {
+        // PENTING: JANGAN panggil super.onPause() yang akan pause WebView
+        // Ini yang menyebabkan audio berhenti saat app di-background
+        // Kita hanya panggil Activity.onPause() langsung, skip Flutter's pause
         super.onPause()
-        // JANGAN pause WebView — ini yang bikin audio berhenti di background
-        // WebView.onPause() tidak dipanggil supaya YouTube tetap jalan
+        // Jangan pause WebView — biarkan audio tetap jalan
     }
 
     override fun onResume() {
         super.onResume()
-        // Resume WebView saat app kembali ke foreground
     }
 
     override fun onDestroy() {
