@@ -1218,6 +1218,46 @@ function openHistoryView() {
 
 
 
+// LOGIN / LOGOUT GOOGLE
+function loginWithGoogle() {
+    if (typeof window._firebaseSignIn === 'function') {
+        window._firebaseSignIn();
+    } else {
+        showToast('Firebase belum siap, coba lagi');
+    }
+}
+
+function logoutFromGoogle() {
+    if (typeof window._firebaseSignOut === 'function') {
+        window._firebaseSignOut().then(() => {
+            updateGoogleLoginUI();
+        });
+    } else {
+        localStorage.removeItem('auspotyGoogleUser');
+        updateGoogleLoginUI();
+        showToast('Berhasil keluar');
+    }
+}
+
+function updateGoogleLoginUI() {
+    var user = getGoogleUser();
+    var loginBtn  = document.getElementById('googleLoginBtn');
+    var logoutBtn = document.getElementById('googleLogoutBtn');
+    var loginText = document.getElementById('googleLoginText');
+    var loginSub  = document.getElementById('googleLoginSub');
+    var logoutSub = document.getElementById('googleLogoutSub');
+    if (user) {
+        if (loginBtn)  loginBtn.style.display  = 'none';
+        if (logoutBtn) logoutBtn.style.display = '';
+        if (logoutSub) logoutSub.innerText = user.name || 'Tap untuk logout';
+    } else {
+        if (loginBtn)  loginBtn.style.display  = '';
+        if (logoutBtn) logoutBtn.style.display = 'none';
+        if (loginSub)  loginSub.innerText = 'Sinkronkan data kamu';
+    }
+    updateProfileUI();
+}
+
 // GOOGLE USER HELPER
 function getGoogleUser() {
     try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; }
