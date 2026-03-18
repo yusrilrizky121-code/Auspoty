@@ -16,8 +16,7 @@ void main() async {
       AndroidInitializationSettings('@mipmap/ic_launcher');
   await _notif.initialize(const InitializationSettings(android: androidInit));
 
-  // Status bar transparan, navigation bar tetap ada (tidak edgeToEdge)
-  // supaya konten tidak tertutup navigation bar sistem
+  // Jangan pakai edgeToEdge — biarkan sistem Android handle navigation bar
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -124,25 +123,18 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
   void _showNowPlayingNotification(String title, String artist) async {
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'auspoty_music',
-      'Musik Sedang Diputar',
+      'auspoty_music', 'Musik Sedang Diputar',
       channelDescription: 'Notifikasi musik Auspoty',
-      importance: Importance.low,
-      priority: Priority.low,
-      ongoing: true,
-      playSound: false,
-      enableVibration: false,
+      importance: Importance.low, priority: Priority.low,
+      ongoing: true, playSound: false, enableVibration: false,
       icon: '@mipmap/ic_launcher',
     );
-    await _notif.show(
-      1, title, artist,
-      const NotificationDetails(android: androidDetails),
-    );
+    await _notif.show(1, title, artist,
+        const NotificationDetails(android: androidDetails));
   }
 
   Future<bool> _handleBackPress() async {
     if (_webViewController == null) return true;
-
     final result = await _webViewController!.evaluateJavascript(source: '''
       (function(){
         var modals = ['playerModal','lyricsModal','editProfileModal','createPlaylistModal','addToPlaylistModal','commentsModal','pickerModal'];
@@ -151,11 +143,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           if(el && el.style.display !== 'none' && el.style.display !== '') return 'modal:'+modals[i];
         }
         var active = document.querySelector('.view-section.active');
-        var viewId = active ? active.id : 'view-home';
-        return viewId;
+        return active ? active.id : 'view-home';
       })()
     ''');
-
     final viewStr = (result ?? 'view-home').replaceAll('"', '').trim();
 
     if (viewStr.startsWith('modal:')) {
@@ -176,22 +166,20 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     final mainViews = ['view-home', 'view-search', 'view-library', 'view-settings'];
     if (!mainViews.contains(viewStr)) {
       await _webViewController!.evaluateJavascript(
-        source: "if(typeof switchView==='function') switchView('home');",
-      );
+          source: "if(typeof switchView==='function') switchView('home');");
       return false;
     }
 
     final now = DateTime.now();
-    if (_lastBackPress == null || now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+    if (_lastBackPress == null ||
+        now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
       _lastBackPress = now;
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tekan sekali lagi untuk keluar'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tekan sekali lagi untuk keluar'),
+          duration: Duration(seconds: 2),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
       return false;
     }
@@ -205,186 +193,172 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         final shouldExit = await _handleBackPress();
-        if (shouldExit && mounted) {
-          SystemNavigator.pop();
-        }
+        if (shouldExit && mounted) SystemNavigator.pop();
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0a0a0f),
         resizeToAvoidBottomInset: false,
-        // TIDAK pakai SafeArea — biarkan WebView handle sendiri via CSS
-        // Tapi kita inject CSS yang benar
-        body: Stack(
-          children: [
-            InAppWebView(
-              initialUrlRequest: URLRequest(
-                url: WebUri('https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app'),
-              ),
-              initialSettings: InAppWebViewSettings(
-                javaScriptEnabled: true,
-                domStorageEnabled: true,
-                databaseEnabled: true,
-                mediaPlaybackRequiresUserGesture: false,
-                allowFileAccessFromFileURLs: false,
-                allowUniversalAccessFromFileURLs: false,
-                mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                useWideViewPort: true,
-                loadWithOverviewMode: true,
-                supportZoom: false,
-                builtInZoomControls: false,
-                displayZoomControls: false,
-                cacheMode: CacheMode.LOAD_DEFAULT,
-                hardwareAcceleration: true,
-                transparentBackground: false,
-                userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 AuspotyApp/3.0',
-              ),
-              onWebViewCreated: (controller) {
-                _webViewController = controller;
+        body: SafeArea(
+          // SafeArea handle status bar atas & navigation bar bawah
+          top: true,
+          bottom: true,
+          child: Stack(
+            children: [
+              InAppWebView(
+                initialUrlRequest: URLRequest(
+                  url: WebUri('https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app'),
+                ),
+                initialSettings: InAppWebViewSettings(
+                  javaScriptEnabled: true,
+                  domStorageEnabled: true,
+                  databaseEnabled: true,
+                  mediaPlaybackRequiresUserGesture: false,
+                  allowFileAccessFromFileURLs: false,
+                  allowUniversalAccessFromFileURLs: false,
+                  mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
+                  useWideViewPort: true,
+                  loadWithOverviewMode: true,
+                  supportZoom: false,
+                  builtInZoomControls: false,
+                  displayZoomControls: false,
+                  cacheMode: CacheMode.LOAD_DEFAULT,
+                  hardwareAcceleration: true,
+                  transparentBackground: false,
+                  userAgent:
+                      'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 AuspotyApp/3.0',
+                ),
+                onWebViewCreated: (controller) {
+                  _webViewController = controller;
 
-                controller.addJavaScriptHandler(
-                  handlerName: 'onMusicPlay',
-                  callback: (args) {
-                    final title = args.isNotEmpty ? args[0].toString() : 'Auspoty';
-                    final artist = args.length > 1 ? args[1].toString() : '';
-                    WakelockPlus.enable();
-                    _showNowPlayingNotification(title, artist);
-                    _startKeepAlive();
-                  },
-                );
-
-                controller.addJavaScriptHandler(
-                  handlerName: 'onMusicPause',
-                  callback: (args) => WakelockPlus.disable(),
-                );
-
-                controller.addJavaScriptHandler(
-                  handlerName: 'isAndroid',
-                  callback: (args) => true,
-                );
-
-                // Download — buka di browser eksternal
-                controller.addJavaScriptHandler(
-                  handlerName: 'openDownload',
-                  callback: (args) async {
-                    final url = args.isNotEmpty ? args[0].toString() : '';
-                    if (url.isNotEmpty) {
-                      final uri = Uri.parse(url);
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
-                  },
-                );
-
-                // Login Google — buka browser eksternal untuk pilih akun
-                controller.addJavaScriptHandler(
-                  handlerName: 'openGoogleLogin',
-                  callback: (args) async {
-                    // Trigger Firebase signInWithPopup di WebView
-                    await _webViewController?.evaluateJavascript(source: '''
-                      if(typeof window._firebaseSignIn === 'function') {
-                        window._firebaseSignIn();
+                  controller.addJavaScriptHandler(
+                    handlerName: 'onMusicPlay',
+                    callback: (args) {
+                      final title = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                      final artist = args.length > 1 ? args[1].toString() : '';
+                      WakelockPlus.enable();
+                      _showNowPlayingNotification(title, artist);
+                      _startKeepAlive();
+                    },
+                  );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'onMusicPause',
+                    callback: (args) => WakelockPlus.disable(),
+                  );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'isAndroid',
+                    callback: (args) => true,
+                  );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'openDownload',
+                    callback: (args) async {
+                      final url = args.isNotEmpty ? args[0].toString() : '';
+                      if (url.isNotEmpty) {
+                        await launchUrl(Uri.parse(url),
+                            mode: LaunchMode.externalApplication);
                       }
-                    ''');
-                  },
-                );
-
-                controller.addJavaScriptHandler(
-                  handlerName: 'getAccountName',
-                  callback: (args) async {
-                    final prefs = await SharedPreferences.getInstance();
-                    return prefs.getString('accountName') ?? '';
-                  },
-                );
-              },
-              onLoadStart: (controller, url) {
-                setState(() => _isLoading = true);
-              },
-              onLoadStop: (controller, url) async {
-                setState(() => _isLoading = false);
-                await _injectBridge(controller);
-              },
-              onProgressChanged: (controller, progress) {
-                if (progress == 100) setState(() => _isLoading = false);
-              },
-              onPermissionRequest: (controller, request) async {
-                return PermissionResponse(
-                  resources: request.resources,
-                  action: PermissionResponseAction.GRANT,
-                );
-              },
-              shouldOverrideUrlLoading: (controller, navigationAction) async {
-                final url = navigationAction.request.url?.toString() ?? '';
-                if (url.contains('vercel.app') ||
-                    url.contains('youtube.com') ||
-                    url.contains('ytimg.com') ||
-                    url.contains('googleapis.com') ||
-                    url.contains('gstatic.com') ||
-                    url.contains('firebaseapp.com') ||
-                    url.contains('firebase.google.com') ||
-                    url.contains('accounts.google.com') ||
-                    url.contains('google.com/recaptcha') ||
-                    url.startsWith('about:')) {
+                    },
+                  );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'openGoogleLogin',
+                    callback: (args) async {
+                      await _webViewController?.evaluateJavascript(source: '''
+                        if(typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
+                      ''');
+                    },
+                  );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'getAccountName',
+                    callback: (args) async {
+                      final prefs = await SharedPreferences.getInstance();
+                      return prefs.getString('accountName') ?? '';
+                    },
+                  );
+                },
+                onLoadStart: (controller, url) {
+                  setState(() => _isLoading = true);
+                },
+                onLoadStop: (controller, url) async {
+                  setState(() => _isLoading = false);
+                  await _injectAll(controller);
+                },
+                onProgressChanged: (controller, progress) {
+                  if (progress == 100) setState(() => _isLoading = false);
+                },
+                onPermissionRequest: (controller, request) async {
+                  return PermissionResponse(
+                    resources: request.resources,
+                    action: PermissionResponseAction.GRANT,
+                  );
+                },
+                shouldOverrideUrlLoading: (controller, navigationAction) async {
+                  final url = navigationAction.request.url?.toString() ?? '';
+                  if (url.contains('vercel.app') ||
+                      url.contains('youtube.com') ||
+                      url.contains('ytimg.com') ||
+                      url.contains('googleapis.com') ||
+                      url.contains('gstatic.com') ||
+                      url.contains('firebaseapp.com') ||
+                      url.contains('firebase.google.com') ||
+                      url.contains('accounts.google.com') ||
+                      url.contains('google.com/recaptcha') ||
+                      url.startsWith('about:')) {
+                    return NavigationActionPolicy.ALLOW;
+                  }
+                  if (url.startsWith('http') && navigationAction.isForMainFrame) {
+                    await launchUrl(Uri.parse(url),
+                        mode: LaunchMode.externalApplication);
+                    return NavigationActionPolicy.CANCEL;
+                  }
                   return NavigationActionPolicy.ALLOW;
-                }
-                if (url.startsWith('http') && navigationAction.isForMainFrame) {
-                  final uri = Uri.parse(url);
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  return NavigationActionPolicy.CANCEL;
-                }
-                return NavigationActionPolicy.ALLOW;
-              },
-            ),
+                },
+              ),
 
-            if (_isLoading)
-              Container(
-                color: const Color(0xFF0a0a0f),
-                child: const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 64),
-                      SizedBox(height: 16),
-                      Text(
-                        'Auspoty',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      SizedBox(height: 24),
-                      CircularProgressIndicator(
-                        color: Color(0xFFa78bfa),
-                        strokeWidth: 2,
-                      ),
-                    ],
+              if (_isLoading)
+                Container(
+                  color: const Color(0xFF0a0a0f),
+                  child: const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 64),
+                        SizedBox(height: 16),
+                        Text('Auspoty',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 28,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2)),
+                        SizedBox(height: 24),
+                        CircularProgressIndicator(
+                            color: Color(0xFFa78bfa), strokeWidth: 2),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Future<void> _injectBridge(InAppWebViewController controller) async {
-    // FIX UTAMA: Inject CSS langsung — override bottom-nav supaya tidak overlap konten
+  Future<void> _injectAll(InAppWebViewController controller) async {
+    // Inject CSS fix — paksa bottom-nav tidak overlap konten
+    // SafeArea sudah handle padding sistem, jadi bottom-nav cukup 60px
     await controller.evaluateJavascript(source: r'''
       (function(){
-        var id = '__flutter_nav_fix__';
+        var id = '__auspoty_fix__';
         var old = document.getElementById(id);
         if(old) old.remove();
         var s = document.createElement('style');
         s.id = id;
         s.textContent = `
-          /* FIX: bottom-nav tidak overlap konten */
           .bottom-nav {
             position: fixed !important;
             bottom: 0 !important;
             left: 0 !important;
             right: 0 !important;
             height: 60px !important;
-            min-height: 60px !important;
             display: flex !important;
             justify-content: space-around !important;
             align-items: center !important;
@@ -408,15 +382,20 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             color: rgba(255,255,255,0.5) !important;
           }
           .nav-item.active { color: #a78bfa !important; }
-          .nav-item svg { width: 22px !important; height: 22px !important; fill: currentColor !important; }
-          /* FIX: body padding supaya konten tidak tertutup nav */
-          body { padding-bottom: 140px !important; }
-          /* FIX: mini player di atas nav */
+          .nav-item svg {
+            width: 22px !important;
+            height: 22px !important;
+            fill: currentColor !important;
+          }
+          body {
+            padding-bottom: 160px !important;
+          }
           .mini-player {
             bottom: 68px !important;
           }
-          /* FIX: toast di atas nav */
-          .toast-notification.show { bottom: 80px !important; }
+          .toast-notification.show {
+            bottom: 80px !important;
+          }
         `;
         document.head.appendChild(s);
       })();
@@ -425,38 +404,23 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     // Inject AndroidBridge
     await controller.evaluateJavascript(source: '''
       window.AndroidBridge = {
-        onMusicPlay: function(title, artist) {
-          window.flutter_inappwebview.callHandler('onMusicPlay', title, artist);
-        },
-        onMusicPause: function() {
-          window.flutter_inappwebview.callHandler('onMusicPause');
-        },
-        isAndroid: function() { return true; },
-        openDownload: function(url) {
-          window.flutter_inappwebview.callHandler('openDownload', url);
-        },
-        openGoogleLogin: function() {
-          window.flutter_inappwebview.callHandler('openGoogleLogin');
-        },
-        logout: function() {
+        onMusicPlay: function(t,a){ window.flutter_inappwebview.callHandler('onMusicPlay',t,a); },
+        onMusicPause: function(){ window.flutter_inappwebview.callHandler('onMusicPause'); },
+        isAndroid: function(){ return true; },
+        openDownload: function(url){ window.flutter_inappwebview.callHandler('openDownload',url); },
+        openGoogleLogin: function(){ window.flutter_inappwebview.callHandler('openGoogleLogin'); },
+        logout: function(){
           localStorage.removeItem('auspotyGoogleUser');
           if(typeof updateProfileUI==='function') updateProfileUI();
           if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
         }
       };
-
-      // Override downloadMusic
-      window.downloadMusic = function() {
-        if(!window.currentTrack){
-          if(typeof showToast==='function') showToast('Putar lagu dulu!');
-          return;
-        }
-        var url = 'https://id.ytmp3.mobi/v1/#' + window.currentTrack.videoId;
-        window.AndroidBridge.openDownload(url);
+      window.downloadMusic = function(){
+        if(!window.currentTrack){ if(typeof showToast==='function') showToast('Putar lagu dulu!'); return; }
+        window.AndroidBridge.openDownload('https://id.ytmp3.mobi/v1/#'+window.currentTrack.videoId);
         if(typeof showToast==='function') showToast('Membuka halaman download...');
       };
-
-      console.log('AndroidBridge injected v3.0');
+      console.log('Auspoty bridge v3.0 ready');
     ''');
   }
 }
