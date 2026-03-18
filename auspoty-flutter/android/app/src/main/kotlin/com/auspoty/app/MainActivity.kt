@@ -27,6 +27,11 @@ class MainActivity : FlutterActivity() {
                     stopService(Intent(this, MusicForegroundService::class.java))
                     result.success(null)
                 }
+                "keepWebViewAlive" -> {
+                    // Dipanggil dari Flutter saat app masuk background
+                    // Tidak perlu lakukan apa-apa di sini — cukup acknowledge
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         }
@@ -35,16 +40,15 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WebView.setWebContentsDebuggingEnabled(false)
-        // Start foreground service dari awal supaya audio bisa jalan di background
+        // Start foreground service dari awal
         startMusicService("Auspoty", "Siap memutar musik")
     }
 
     override fun onPause() {
-        // PENTING: JANGAN panggil super.onPause() yang akan pause WebView
-        // Ini yang menyebabkan audio berhenti saat app di-background
-        // Kita hanya panggil Activity.onPause() langsung, skip Flutter's pause
         super.onPause()
-        // Jangan pause WebView — biarkan audio tetap jalan
+        // PENTING: Jangan panggil flutterView?.onPause() atau webView.onPause()
+        // Flutter engine akan pause WebView secara default — kita cegah dengan
+        // tidak memanggil apapun yang bisa pause WebView rendering/JS execution
     }
 
     override fun onResume() {

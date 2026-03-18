@@ -18,7 +18,6 @@ void main() async {
       AndroidInitializationSettings('@mipmap/ic_launcher');
   await _notif.initialize(const InitializationSettings(android: androidInit));
 
-  // Jangan pakai edgeToEdge — biarkan sistem Android handle navigation bar
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -81,17 +80,22 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _wasInBackground = true;
+      // Beritahu native untuk tidak pause WebView
+      _musicChannel.invokeMethod('keepWebViewAlive').catchError((_) {});
     }
     if (state == AppLifecycleState.resumed && _wasInBackground) {
       _wasInBackground = false;
+      // Resume AudioContext dan player jika perlu
       _webViewController?.evaluateJavascript(source: '''
         (function(){
-          if(typeof _bgAudioCtx!=='undefined'&&_bgAudioCtx&&_bgAudioCtx.state==='suspended'){
-            _bgAudioCtx.resume();
+          if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
+            window._keepAliveCtx.resume();
           }
-          if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){
-            var s=ytPlayer.getPlayerState();
-            if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){ytPlayer.playVideo();}
+          if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
+            var s = ytPlayer.getPlayerState();
+            if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying){
+              ytPlayer.playVideo();
+            }
           }
         })()
       ''');
@@ -100,28 +104,30 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
   void _startKeepAlive() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _keepAliveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       _webViewController?.evaluateJavascript(source: '''
         (function(){
-          if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){
-            var s=ytPlayer.getPlayerState();
-            if(s===0&&!window._bgEndedHandling){
-              window._bgEndedHandling=true;
-              if(typeof isRepeat!=='undefined'&&isRepeat){
-                ytPlayer.seekTo(0);ytPlayer.playVideo();
-                setTimeout(function(){window._bgEndedHandling=false;},3000);
-              } else if(typeof playNextSimilarSong==='function'){
+          // Resume AudioContext kalau suspended
+          if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
+            window._keepAliveCtx.resume();
+          }
+          // Handle lagu selesai
+          if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
+            var s = ytPlayer.getPlayerState();
+            if(s === 0 && !window._bgEndedHandling){
+              window._bgEndedHandling = true;
+              if(typeof isRepeat !== 'undefined' && isRepeat){
+                ytPlayer.seekTo(0); ytPlayer.playVideo();
+                setTimeout(function(){ window._bgEndedHandling = false; }, 3000);
+              } else if(typeof playNextSimilarSong === 'function'){
                 playNextSimilarSong();
-                setTimeout(function(){window._bgEndedHandling=false;},5000);
+                setTimeout(function(){ window._bgEndedHandling = false; }, 5000);
               }
-            } else if(s===1||s===3){
-              window._bgEndedHandling=false;
-            } else if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){
+            } else if(s === 1 || s === 3){
+              window._bgEndedHandling = false;
+            } else if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying){
               ytPlayer.playVideo();
             }
-          }
-          if(typeof _bgAudioCtx!=='undefined'&&_bgAudioCtx&&_bgAudioCtx.state==='suspended'){
-            _bgAudioCtx.resume();
           }
         })()
       ''');
@@ -132,8 +138,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'auspoty_music', 'Musik Sedang Diputar',
       channelDescription: 'Notifikasi musik Auspoty',
-      importance: Importance.low, priority: Priority.low,
-      ongoing: true, playSound: false, enableVibration: false,
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,
+      playSound: false,
+      enableVibration: false,
       icon: '@mipmap/ic_launcher',
     );
     await _notif.show(1, title, artist,
@@ -145,9 +154,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     final result = await _webViewController!.evaluateJavascript(source: '''
       (function(){
         var modals = ['playerModal','lyricsModal','editProfileModal','createPlaylistModal','addToPlaylistModal','commentsModal','pickerModal'];
-        for(var i=0;i<modals.length;i++){
+        for(var i = 0; i < modals.length; i++){
           var el = document.getElementById(modals[i]);
-          if(el && el.style.display !== 'none' && el.style.display !== '') return 'modal:'+modals[i];
+          if(el && el.style.display !== 'none' && el.style.display !== '') return 'modal:' + modals[i];
         }
         var active = document.querySelector('.view-section.active');
         return active ? active.id : 'view-home';
@@ -161,7 +170,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
         (function(){
           var el = document.getElementById('$modalId');
           if(el) el.style.display = 'none';
-          if('$modalId' === 'lyricsModal') {
+          if('$modalId' === 'lyricsModal'){
             if(typeof closeLyricsToPlayer === 'function') closeLyricsToPlayer();
             else if(typeof closeLyrics === 'function') closeLyrics();
           }
@@ -173,7 +182,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     final mainViews = ['view-home', 'view-search', 'view-library', 'view-settings'];
     if (!mainViews.contains(viewStr)) {
       await _webViewController!.evaluateJavascript(
-          source: "if(typeof switchView==='function') switchView('home');");
+          source: "if(typeof switchView === 'function') switchView('home');");
       return false;
     }
 
@@ -206,7 +215,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
         backgroundColor: const Color(0xFF0a0a0f),
         resizeToAvoidBottomInset: false,
         body: SafeArea(
-          // SafeArea handle status bar atas & navigation bar bawah
           top: true,
           bottom: true,
           child: Stack(
@@ -231,8 +239,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   cacheMode: CacheMode.LOAD_DEFAULT,
                   hardwareAcceleration: true,
                   transparentBackground: false,
+                  // Izinkan third-party cookies supaya Google login bisa simpan session
+                  thirdPartyCookiesEnabled: true,
                   userAgent:
-                      'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36 AuspotyApp/3.0',
+                      'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
                 ),
                 onWebViewCreated: (controller) {
                   _webViewController = controller;
@@ -245,46 +255,36 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       WakelockPlus.enable();
                       _showNowPlayingNotification(title, artist);
                       _startKeepAlive();
-                      // Start foreground service supaya audio jalan di background
                       _musicChannel.invokeMethod('startMusicService', {
                         'title': title,
                         'artist': artist,
                       }).catchError((_) {});
                     },
                   );
+
                   controller.addJavaScriptHandler(
                     handlerName: 'onMusicPause',
-                    // Jangan stop service saat pause — biarkan tetap jalan
                     callback: (args) => WakelockPlus.disable(),
                   );
+
                   controller.addJavaScriptHandler(
                     handlerName: 'isAndroid',
                     callback: (args) => true,
                   );
+
                   controller.addJavaScriptHandler(
                     handlerName: 'openDownload',
                     callback: (args) async {
                       final url = args.isNotEmpty ? args[0].toString() : '';
                       if (url.isNotEmpty) {
-                        await launchUrl(Uri.parse(url),
-                            mode: LaunchMode.externalApplication);
+                        final uri = Uri.parse(url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        }
                       }
                     },
                   );
-                  controller.addJavaScriptHandler(
-                    handlerName: 'openGoogleLogin',
-                    callback: (args) async {
-                      // Buka halaman login di Chrome eksternal
-                      // Setelah login, user balik ke app dan WebView reload
-                      const loginUrl = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/?login=1';
-                      await launchUrl(Uri.parse(loginUrl),
-                          mode: LaunchMode.externalApplication);
-                      // Setelah user balik ke app, reload WebView supaya
-                      // Firebase onAuthStateChanged trigger dengan session baru
-                      await Future.delayed(const Duration(seconds: 2));
-                      await _webViewController?.reload();
-                    },
-                  );
+
                   controller.addJavaScriptHandler(
                     handlerName: 'getAccountName',
                     callback: (args) async {
@@ -293,36 +293,56 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                     },
                   );
                 },
+
                 onLoadStart: (controller, url) {
                   setState(() => _isLoading = true);
                 },
+
                 onLoadStop: (controller, url) async {
                   setState(() => _isLoading = false);
-                  await _injectAll(controller);
+                  final urlStr = url?.toString() ?? '';
+                  // Kalau sudah balik ke app URL setelah Google login, inject ulang
+                  if (urlStr.contains('vercel.app') || urlStr.contains('clone2')) {
+                    await _injectAll(controller);
+                  }
                 },
+
                 onProgressChanged: (controller, progress) {
                   if (progress == 100) setState(() => _isLoading = false);
                 },
+
                 onPermissionRequest: (controller, request) async {
                   return PermissionResponse(
                     resources: request.resources,
                     action: PermissionResponseAction.GRANT,
                   );
                 },
+
+                // Kontrol navigasi — Google login harus jalan di dalam WebView
                 shouldOverrideUrlLoading: (controller, navigationAction) async {
                   final url = navigationAction.request.url?.toString() ?? '';
-                  
-                  // Semua URL yang dibutuhkan app — allow di WebView
-                  if (url.contains('vercel.app') ||
-                      url.contains('youtube.com') ||
-                      url.contains('ytimg.com') ||
-                      url.contains('googleapis.com') ||
-                      url.contains('gstatic.com') ||
-                      url.contains('firebaseapp.com') ||
-                      url.contains('firebase.google.com') ||
-                      url.contains('accounts.google.com') ||
-                      url.contains('google.com') ||
-                      url.startsWith('about:') ||
+
+                  // URL-URL yang harus jalan di dalam WebView
+                  final allowedInWebView = [
+                    'vercel.app',
+                    'youtube.com',
+                    'ytimg.com',
+                    'googleapis.com',
+                    'gstatic.com',
+                    'firebaseapp.com',
+                    'firebase.google.com',
+                    'accounts.google.com',  // Google login flow
+                    'google.com',
+                    'googleusercontent.com',
+                  ];
+
+                  for (final domain in allowedInWebView) {
+                    if (url.contains(domain)) {
+                          return NavigationActionPolicy.ALLOW;
+                    }
+                  }
+
+                  if (url.startsWith('about:') ||
                       url.startsWith('blob:') ||
                       url.startsWith('data:')) {
                     return NavigationActionPolicy.ALLOW;
@@ -330,10 +350,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
                   // Link eksternal lain — buka di browser
                   if (url.startsWith('http') && navigationAction.isForMainFrame) {
-                    await launchUrl(Uri.parse(url),
-                        mode: LaunchMode.externalApplication);
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
                     return NavigationActionPolicy.CANCEL;
                   }
+
                   return NavigationActionPolicy.ALLOW;
                 },
               ),
@@ -368,8 +391,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   }
 
   Future<void> _injectAll(InAppWebViewController controller) async {
-    // Inject CSS fix — paksa bottom-nav tidak overlap konten
-    // SafeArea sudah handle padding sistem, jadi bottom-nav cukup 60px
+    // CSS fix — nav bar tidak overlap konten
     await controller.evaluateJavascript(source: r'''
       (function(){
         var id = '__auspoty_fix__';
@@ -412,54 +434,53 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             height: 22px !important;
             fill: currentColor !important;
           }
-          body {
-            padding-bottom: 160px !important;
-          }
-          .mini-player {
-            bottom: 68px !important;
-          }
-          .toast-notification.show {
-            bottom: 80px !important;
-          }
+          body { padding-bottom: 160px !important; }
+          .mini-player { bottom: 68px !important; }
+          .toast-notification.show { bottom: 80px !important; }
         `;
         document.head.appendChild(s);
       })();
     ''');
 
-    // Inject AndroidBridge
+    // AndroidBridge + AudioContext keep-alive
     await controller.evaluateJavascript(source: '''
-      window.AndroidBridge = {
-        onMusicPlay: function(t,a){ window.flutter_inappwebview.callHandler('onMusicPlay',t,a); },
-        onMusicPause: function(){ window.flutter_inappwebview.callHandler('onMusicPause'); },
-        isAndroid: function(){ return true; },
-        openDownload: function(url){ window.flutter_inappwebview.callHandler('openDownload',url); },
-        openGoogleLogin: function(){ window.flutter_inappwebview.callHandler('openGoogleLogin'); },
-        logout: function(){
-          localStorage.removeItem('auspotyGoogleUser');
-          if(typeof updateProfileUI==='function') updateProfileUI();
-          if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
-        }
-      };
-
-      // Inject AudioContext keep-alive — paksa browser tetap aktif di background
-      // Ini trick standar untuk background audio di WebView Android
       (function(){
-        if(window._auspotyKeepAlive) return;
-        window._auspotyKeepAlive = true;
-        try {
-          var ctx = new (window.AudioContext || window.webkitAudioContext)();
-          var osc = ctx.createOscillator();
-          var gain = ctx.createGain();
-          gain.gain.value = 0.00001; // volume hampir 0, tidak terdengar
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          window._keepAliveCtx = ctx;
-          console.log('AudioContext keep-alive aktif');
-        } catch(e) { console.log('AudioContext keep-alive gagal:', e); }
-      })();
+        // AndroidBridge
+        window.AndroidBridge = {
+          onMusicPlay: function(t, a){
+            window.flutter_inappwebview.callHandler('onMusicPlay', t, a);
+          },
+          onMusicPause: function(){
+            window.flutter_inappwebview.callHandler('onMusicPause');
+          },
+          isAndroid: function(){ return true; },
+          openDownload: function(url){
+            window.flutter_inappwebview.callHandler('openDownload', url);
+          },
+          logout: function(){
+            localStorage.removeItem('auspotyGoogleUser');
+            if(typeof updateProfileUI === 'function') updateProfileUI();
+            if(typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+          }
+        };
 
-      console.log('Auspoty bridge v3.0 ready');
+        // AudioContext keep-alive — cegah browser suspend audio di background
+        if(!window._auspotyKeepAlive){
+          window._auspotyKeepAlive = true;
+          try {
+            var ctx = new (window.AudioContext || window.webkitAudioContext)();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            gain.gain.value = 0.00001;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.start();
+            window._keepAliveCtx = ctx;
+          } catch(e) {}
+        }
+
+        console.log('[Auspoty] Bridge v3.1 ready');
+      })();
     ''');
   }
 }
