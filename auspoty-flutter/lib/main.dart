@@ -10,23 +10,21 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
-import 'package:audio_service/audio_service.dart';
-import 'audio_handler.dart';
 
-// Global reference ke WebView controller
+// MethodChannel ke MusicPlayerService (ExoPlayer native Kotlin)
+const _playerChannel = MethodChannel('com.auspoty.app/music');
+
+// Global WebView controller
 InAppWebViewController? _globalWebController;
-bool _globalIsPlaying = false;
 
-// KeepAlive token — WebView tidak di-dispose saat widget tree berubah
+// KeepAlive — WebView tidak di-dispose
 final _webViewKeepAlive = InAppWebViewKeepAlive();
 
-// Native audio handler — jalan di Android foreground service via audio_service
-late AuspotyAudioHandler _audioHandler;
 bool _nativeMode = false;
 
 const _apiBase = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
 
-// Fetch stream URL dari backend
+// Fetch stream URL dari Vercel backend
 Future<Map<String, dynamic>?> _fetchStreamUrl(String videoId) async {
   try {
     final resp = await http.post(
@@ -35,36 +33,26 @@ Future<Map<String, dynamic>?> _fetchStreamUrl(String videoId) async {
       body: jsonEncode({'videoId': videoId}),
     ).timeout(const Duration(seconds: 30));
     if (resp.statusCode == 200) {
-      final data = jsonDecode(resp.body);
+      final data = jsonDecode(resp.body) as Map<String, dynamic>;
       if (data['status'] == 'success') return data;
     }
   } catch (_) {}
   return null;
 }
 
-// Play audio natively via AudioService (foreground service)
+// Play via ExoPlayer native
 Future<bool> _playNative(String videoId, String title, String artist, String thumbnail) async {
   try {
     final data = await _fetchStreamUrl(videoId);
     if (data == null) return false;
 
-    final streamUrl = data['url'] as String;
-    final trackTitle = (data['title'] as String?) ?? title;
-    final trackArtist = (data['artist'] as String?) ?? artist;
-    final duration = Duration(seconds: (data['duration'] as int?) ?? 0);
-    final thumb = (data['thumbnail'] as String?) ?? thumbnail;
-
-    final mediaItem = MediaItem(
-      id: videoId,
-      title: trackTitle,
-      artist: trackArtist,
-      duration: duration,
-      artUri: thumb.isNotEmpty ? Uri.parse(thumb) : null,
-    );
-
-    await _audioHandler.playFromUrl(streamUrl, mediaItem);
+    await _playerChannel.invokeMethod('playUrl', {
+      'url': data['url'] as String,
+      'title': (data['title'] as String?) ?? title,
+      'artist': (data['artist'] as String?) ?? artist,
+      'thumbnail': (data['thumbnail'] as String?) ?? thumbnail,
+    });
     _nativeMode = true;
-    _globalIsPlaying = true;
     WakelockPlus.enable();
     return true;
   } catch (_) {
@@ -73,60 +61,8 @@ Future<bool> _playNative(String videoId, String title, String artist, String thu
   }
 }
 
-void _handleNotifAction(String? actionId) {
-  // Notifikasi media dihandle otomatis oleh audio_service
-  // Ini hanya fallback untuk aksi custom
-  switch (actionId) {
-    case 'next':
-      _globalWebController?.evaluateJavascript(
-          source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
-      break;
-    case 'prev':
-      _globalWebController?.evaluateJavascript(
-          source: "if(typeof playPrevSong==='function') playPrevSong();");
-      break;
-  }
-}
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Init AudioService — foreground service native Android
-  // androidStopForegroundOnPause: false = audio TIDAK berhenti saat app di-background
-  _audioHandler = await AudioService.init(
-    builder: () => AuspotyAudioHandler(),
-    config: AudioServiceConfig(
-      androidNotificationChannelId: 'com.auspoty.app.audio',
-      androidNotificationChannelName: 'Auspoty Music',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: false,
-      androidNotificationIcon: 'mipmap/ic_launcher',
-      androidShowNotificationBadge: false,
-    ),
-  );
-
-  // Setup callback skip dari notifikasi media
-  _audioHandler.onSkipToNext = () {
-    _globalWebController?.evaluateJavascript(
-        source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
-  };
-  _audioHandler.onSkipToPrevious = () {
-    _globalWebController?.evaluateJavascript(
-        source: "if(typeof playPrevSong==='function') playPrevSong(); else if(typeof songHistory!=='undefined'&&songHistory.length>1){ var t=songHistory[songHistory.length-2]; if(t) playMusicById(t.videoId); }");
-  };
-  _audioHandler.onCompleted = () {
-    _globalIsPlaying = false;
-    _globalWebController?.evaluateJavascript(source: '''
-      window._nativePlaying = false;
-      if(typeof isRepeat !== 'undefined' && isRepeat){
-        window.flutter_inappwebview.callHandler('playNative',
-          window.currentTrack?.videoId||'', window.currentTrack?.title||'',
-          window.currentTrack?.artist||'', window.currentTrack?.img||'');
-      } else if(typeof playNextSimilarSong === 'function'){
-        playNextSimilarSong();
-      }
-    ''');
-  };
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -165,61 +101,39 @@ class AuspotyWebView extends StatefulWidget {
   State<AuspotyWebView> createState() => _AuspotyWebViewState();
 }
 
-class _AuspotyWebViewState extends State<AuspotyWebView>
-    with WidgetsBindingObserver {
+class _AuspotyWebViewState extends State<AuspotyWebView> {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
   Timer? _progressTimer;
   DateTime? _lastBackPress;
-  String _nowTitle = 'Auspoty';
-  String _nowArtist = '';
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addObserver(this);
-  }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _progressTimer?.cancel();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // audio_service handle background sendiri via foreground service
-    // Tidak perlu intervensi lifecycle
-    if (state == AppLifecycleState.resumed && _nativeMode) {
-      // Sync UI play/pause saat kembali ke app
-      _webViewController?.evaluateJavascript(source: '''
-        window._nativePlaying = ${_audioHandler.isPlaying};
-        if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(${_audioHandler.isPlaying});
-      ''');
-    }
-  }
-
   void _startProgressTimer() {
     _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!_nativeMode) return;
-      final pos = _audioHandler.position.inSeconds;
-      final dur = _audioHandler.duration?.inSeconds ?? 0;
-      if (dur > 0) {
-        _webViewController?.evaluateJavascript(source: '''
-          (function(){
-            var pos = $pos, dur = $dur;
-            var pct = (pos/dur)*100;
-            var el = document.getElementById('progressBar');
-            if(el) el.style.background = 'linear-gradient(to right, white '+pct+'%, rgba(255,255,255,0.2) '+pct+'%)';
-            var ct = document.getElementById('currentTime');
-            if(ct) ct.innerText = Math.floor(pos/60)+':'+(pos%60<10?'0':'')+(pos%60);
-            var tt = document.getElementById('totalTime');
-            if(tt) tt.innerText = Math.floor(dur/60)+':'+(dur%60<10?'0':'')+(dur%60);
-          })()
-        ''');
-      }
+      try {
+        final pos = await _playerChannel.invokeMethod<int>('getPosition') ?? 0;
+        final dur = await _playerChannel.invokeMethod<int>('getDuration') ?? 0;
+        if (dur > 0) {
+          _webViewController?.evaluateJavascript(source: '''
+            (function(){
+              var pos=$pos, dur=$dur, pct=(pos/dur)*100;
+              var el=document.getElementById('progressBar');
+              if(el) el.style.background='linear-gradient(to right,white '+pct+'%,rgba(255,255,255,0.2) '+pct+'%)';
+              var ct=document.getElementById('currentTime');
+              if(ct) ct.innerText=Math.floor(pos/1000/60)+':'+(Math.floor(pos/1000)%60<10?'0':'')+Math.floor(pos/1000)%60;
+              var tt=document.getElementById('totalTime');
+              if(tt) tt.innerText=Math.floor(dur/1000/60)+':'+(Math.floor(dur/1000)%60<10?'0':'')+Math.floor(dur/1000)%60;
+            })()
+          ''');
+        }
+      } catch (_) {}
     });
   }
 
@@ -227,13 +141,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     if (_webViewController == null) return true;
     final result = await _webViewController!.evaluateJavascript(source: '''
       (function(){
-        var modals = ['playerModal','lyricsModal','editProfileModal','createPlaylistModal','addToPlaylistModal','commentsModal','pickerModal'];
-        for(var i = 0; i < modals.length; i++){
-          var el = document.getElementById(modals[i]);
-          if(el && el.style.display !== 'none' && el.style.display !== '') return 'modal:' + modals[i];
+        var modals=['playerModal','lyricsModal','editProfileModal','createPlaylistModal','addToPlaylistModal','commentsModal','pickerModal'];
+        for(var i=0;i<modals.length;i++){
+          var el=document.getElementById(modals[i]);
+          if(el&&el.style.display!=='none'&&el.style.display!=='') return 'modal:'+modals[i];
         }
-        var active = document.querySelector('.view-section.active');
-        return active ? active.id : 'view-home';
+        var active=document.querySelector('.view-section.active');
+        return active?active.id:'view-home';
       })()
     ''');
     final viewStr = (result ?? 'view-home').replaceAll('"', '').trim();
@@ -242,27 +156,25 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
       final modalId = viewStr.split(':')[1];
       await _webViewController!.evaluateJavascript(source: '''
         (function(){
-          var el = document.getElementById('$modalId');
-          if(el) el.style.display = 'none';
-          if('$modalId' === 'lyricsModal'){
-            if(typeof closeLyricsToPlayer === 'function') closeLyricsToPlayer();
-            else if(typeof closeLyrics === 'function') closeLyrics();
+          var el=document.getElementById('$modalId');
+          if(el) el.style.display='none';
+          if('$modalId'==='lyricsModal'){
+            if(typeof closeLyricsToPlayer==='function') closeLyricsToPlayer();
+            else if(typeof closeLyrics==='function') closeLyrics();
           }
         })()
       ''');
       return false;
     }
 
-    final mainViews = ['view-home', 'view-search', 'view-library', 'view-settings'];
-    if (!mainViews.contains(viewStr)) {
+    if (!['view-home','view-search','view-library','view-settings'].contains(viewStr)) {
       await _webViewController!.evaluateJavascript(
-          source: "if(typeof switchView === 'function') switchView('home');");
+          source: "if(typeof switchView==='function') switchView('home');");
       return false;
     }
 
     final now = DateTime.now();
-    if (_lastBackPress == null ||
-        now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
+    if (_lastBackPress == null || now.difference(_lastBackPress!) > const Duration(seconds: 2)) {
       _lastBackPress = now;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -276,47 +188,31 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     return true;
   }
 
-  // Download MP3 langsung ke storage
   Future<void> _downloadMp3(String videoId, String title) async {
-    if (Platform.isAndroid) {
-      await Permission.storage.request();
-    }
-
+    if (Platform.isAndroid) await Permission.storage.request();
     try {
       final apiResp = await http.post(
         Uri.parse('$_apiBase/api/download'),
         headers: {'Content-Type': 'application/json'},
         body: '{"videoId":"$videoId"}',
       ).timeout(const Duration(seconds: 60));
-
-      if (apiResp.statusCode != 200) throw Exception('API error ${apiResp.statusCode}');
-
-      final body = apiResp.body;
-      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
-      final titleMatch = RegExp(r'"title"\s*:\s*"([^"]+)"').firstMatch(body);
+      if (apiResp.statusCode != 200) throw Exception('API error');
+      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(apiResp.body);
+      final titleMatch = RegExp(r'"title"\s*:\s*"([^"]+)"').firstMatch(apiResp.body);
       if (urlMatch == null) throw Exception('URL tidak ditemukan');
-
       final mp3Url = urlMatch.group(1)!.replaceAll(r'\/', '/');
       final mp3Title = titleMatch?.group(1) ?? title;
-
       final dlResp = await http.get(Uri.parse(mp3Url)).timeout(const Duration(seconds: 120));
       if (dlResp.statusCode != 200) throw Exception('Download gagal');
-
       final dir = await getExternalStorageDirectory();
-      final downloadsPath = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
-      final savePath = '${downloadsPath}Download/${_sanitizeFilename(mp3Title)}.mp3';
-      final file = File(savePath);
+      final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
+      final file = File('${base}Download/${title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')}.mp3');
       await file.parent.create(recursive: true);
       await file.writeAsBytes(dlResp.bodyBytes);
-
       _webViewController?.evaluateJavascript(source: "showToast('Download selesai: $mp3Title');");
-    } catch (e) {
+    } catch (_) {
       _webViewController?.evaluateJavascript(source: "showToast('Download gagal, coba lagi');");
     }
-  }
-
-  String _sanitizeFilename(String name) {
-    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
   }
 
   @override
@@ -338,16 +234,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             children: [
               InAppWebView(
                 keepAlive: _webViewKeepAlive,
-                initialUrlRequest: URLRequest(
-                  url: WebUri(_apiBase),
-                ),
+                initialUrlRequest: URLRequest(url: WebUri(_apiBase)),
                 initialSettings: InAppWebViewSettings(
                   javaScriptEnabled: true,
                   domStorageEnabled: true,
                   databaseEnabled: true,
                   mediaPlaybackRequiresUserGesture: false,
-                  allowFileAccessFromFileURLs: false,
-                  allowUniversalAccessFromFileURLs: false,
                   mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                   useWideViewPort: true,
                   loadWithOverviewMode: true,
@@ -356,64 +248,63 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   displayZoomControls: false,
                   cacheMode: CacheMode.LOAD_DEFAULT,
                   hardwareAcceleration: true,
-                  transparentBackground: false,
-                  userAgent:
-                      'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                  userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
                 ),
                 onWebViewCreated: (controller) {
                   _webViewController = controller;
                   _globalWebController = controller;
 
-                  controller.addJavaScriptHandler(
-                    handlerName: 'onMusicPlay',
-                    callback: (args) {
-                      final title = args.isNotEmpty ? args[0].toString() : 'Auspoty';
-                      final artist = args.length > 1 ? args[1].toString() : '';
-                      _nowTitle = title;
-                      _nowArtist = artist;
-                      _globalIsPlaying = true;
-                      WakelockPlus.enable();
-                    },
-                  );
+                  // Terima callback dari Kotlin (next/prev/completed)
+                  _playerChannel.setMethodCallHandler((call) async {
+                    switch (call.method) {
+                      case 'onNext':
+                        controller.evaluateJavascript(
+                            source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+                        break;
+                      case 'onPrev':
+                        controller.evaluateJavascript(
+                            source: "if(typeof playPrevSong==='function') playPrevSong();");
+                        break;
+                      case 'onCompleted':
+                        _nativeMode = false;
+                        controller.evaluateJavascript(source: '''
+                          window._nativePlaying=false;
+                          if(typeof isRepeat!=='undefined'&&isRepeat){
+                            window.flutter_inappwebview.callHandler('playNative',
+                              window.currentTrack?.videoId||'',window.currentTrack?.title||'',
+                              window.currentTrack?.artist||'',window.currentTrack?.img||'');
+                          } else if(typeof playNextSimilarSong==='function'){
+                            playNextSimilarSong();
+                          }
+                        ''');
+                        break;
+                    }
+                  });
 
-                  controller.addJavaScriptHandler(
-                    handlerName: 'onMusicPause',
-                    callback: (args) {
-                      _globalIsPlaying = false;
-                      WakelockPlus.disable();
-                    },
-                  );
-
-                  // Handler utama: play audio natively via ExoPlayer + audio_service
                   controller.addJavaScriptHandler(
                     handlerName: 'playNative',
                     callback: (args) async {
-                      final videoId = args.isNotEmpty ? args[0].toString() : '';
-                      final title = args.length > 1 ? args[1].toString() : '';
-                      final artist = args.length > 2 ? args[2].toString() : '';
+                      final videoId   = args.isNotEmpty ? args[0].toString() : '';
+                      final title     = args.length > 1 ? args[1].toString() : '';
+                      final artist    = args.length > 2 ? args[2].toString() : '';
                       final thumbnail = args.length > 3 ? args[3].toString() : '';
                       if (videoId.isEmpty) return;
 
-                      _nowTitle = title;
-                      _nowArtist = artist;
-
-                      controller.evaluateJavascript(source: "window._nativeLoading = true;");
-
+                      controller.evaluateJavascript(source: "window._nativeLoading=true;");
                       final ok = await _playNative(videoId, title, artist, thumbnail);
 
                       if (ok) {
                         _startProgressTimer();
                         controller.evaluateJavascript(source: '''
-                          window._nativeLoading = false;
-                          window._nativePlaying = true;
-                          if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(true);
+                          window._nativeLoading=false;
+                          window._nativePlaying=true;
+                          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
                         ''');
                       } else {
-                        // Fallback ke ytPlayer
                         controller.evaluateJavascript(source: '''
-                          window._nativeLoading = false;
-                          window._nativePlaying = false;
-                          if(typeof ytPlayer !== 'undefined' && ytPlayer) ytPlayer.loadVideoById('$videoId');
+                          window._nativeLoading=false;
+                          window._nativePlaying=false;
+                          if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.loadVideoById('$videoId');
                         ''');
                       }
                     },
@@ -422,20 +313,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   controller.addJavaScriptHandler(
                     handlerName: 'nativePause',
                     callback: (args) async {
-                      if (_nativeMode) {
-                        await _audioHandler.pause();
-                        _globalIsPlaying = false;
-                      }
+                      if (_nativeMode) await _playerChannel.invokeMethod('pause');
                     },
                   );
 
                   controller.addJavaScriptHandler(
                     handlerName: 'nativeResume',
                     callback: (args) async {
-                      if (_nativeMode) {
-                        await _audioHandler.play();
-                        _globalIsPlaying = true;
-                      }
+                      if (_nativeMode) await _playerChannel.invokeMethod('resume');
                     },
                   );
 
@@ -444,9 +329,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                     callback: (args) async {
                       if (_nativeMode && args.isNotEmpty) {
                         final pct = double.tryParse(args[0].toString()) ?? 0;
-                        final dur = _audioHandler.duration?.inSeconds ?? 0;
+                        final dur = await _playerChannel.invokeMethod<int>('getDuration') ?? 0;
                         if (dur > 0) {
-                          await _audioHandler.seek(Duration(seconds: (pct / 100 * dur).round()));
+                          await _playerChannel.invokeMethod('seekTo', {
+                            'positionMs': (pct / 100 * dur).round(),
+                          });
                         }
                       }
                     },
@@ -461,7 +348,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                     handlerName: 'downloadTrack',
                     callback: (args) async {
                       final videoId = args.isNotEmpty ? args[0].toString() : '';
-                      final title = args.length > 1 ? args[1].toString() : 'lagu';
+                      final title   = args.length > 1 ? args[1].toString() : 'lagu';
                       if (videoId.isNotEmpty) _downloadMp3(videoId, title);
                     },
                   );
@@ -472,9 +359,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       final url = args.isNotEmpty ? args[0].toString() : '';
                       if (url.isNotEmpty) {
                         final uri = Uri.parse(url);
-                        if (await canLaunchUrl(uri)) {
-                          await launchUrl(uri, mode: LaunchMode.externalApplication);
-                        }
+                        if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                       }
                     },
                   );
@@ -490,15 +375,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   controller.addJavaScriptHandler(
                     handlerName: 'openGoogleLogin',
                     callback: (args) async {
-                      const loginUrl = '$_apiBase/login.html';
-                      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(loginUrl)));
+                      await controller.loadUrl(urlRequest: URLRequest(url: WebUri('$_apiBase/login.html')));
                     },
                   );
                 },
 
-                onLoadStart: (controller, url) {
-                  setState(() => _isLoading = true);
-                },
+                onLoadStart: (controller, url) => setState(() => _isLoading = true),
 
                 onLoadStop: (controller, url) async {
                   setState(() => _isLoading = false);
@@ -511,14 +393,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       await controller.evaluateJavascript(source: '''
                         (function(){
                           try {
-                            var raw = decodeURIComponent("${Uri.encodeComponent(userData)}");
-                            localStorage.setItem('auspotyGoogleUser', raw);
-                            var parsed = JSON.parse(raw);
-                            if(typeof updateProfileUI === 'function') updateProfileUI();
-                            if(typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
-                            if(typeof showToast === 'function') showToast('Selamat datang, ' + (parsed.name || '').split(' ')[0] + '!');
-                            history.replaceState(null, '', '/');
-                          } catch(e) { console.error('userData inject error:', e); }
+                            var raw=decodeURIComponent("${Uri.encodeComponent(userData)}");
+                            localStorage.setItem('auspotyGoogleUser',raw);
+                            var parsed=JSON.parse(raw);
+                            if(typeof updateProfileUI==='function') updateProfileUI();
+                            if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
+                            if(typeof showToast==='function') showToast('Selamat datang, '+(parsed.name||'').split(' ')[0]+'!');
+                            history.replaceState(null,'','/');
+                          } catch(e){ console.error('userData inject error:',e); }
                         })()
                       ''');
                     }
@@ -533,9 +415,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   final url = createWindowAction.request.url?.toString() ?? '';
                   if (url.isNotEmpty && url != 'about:blank') {
                     final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
+                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }
                   return true;
                 },
@@ -545,31 +425,21 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                 },
 
                 onPermissionRequest: (controller, request) async {
-                  return PermissionResponse(
-                    resources: request.resources,
-                    action: PermissionResponseAction.GRANT,
-                  );
+                  return PermissionResponse(resources: request.resources, action: PermissionResponseAction.GRANT);
                 },
 
                 shouldOverrideUrlLoading: (controller, navigationAction) async {
                   final url = navigationAction.request.url?.toString() ?? '';
-                  final allowedInWebView = [
-                    'vercel.app', 'youtube.com', 'ytimg.com',
-                    'googleapis.com', 'gstatic.com', 'firebaseapp.com',
-                    'firebase.google.com', 'accounts.google.com',
-                    'google.com', 'googleusercontent.com',
-                  ];
-                  for (final domain in allowedInWebView) {
-                    if (url.contains(domain)) return NavigationActionPolicy.ALLOW;
-                  }
+                  final allowed = ['vercel.app','youtube.com','ytimg.com','googleapis.com',
+                    'gstatic.com','firebaseapp.com','firebase.google.com',
+                    'accounts.google.com','google.com','googleusercontent.com'];
+                  for (final d in allowed) { if (url.contains(d)) return NavigationActionPolicy.ALLOW; }
                   if (url.startsWith('about:') || url.startsWith('blob:') || url.startsWith('data:')) {
                     return NavigationActionPolicy.ALLOW;
                   }
                   if (url.startsWith('http') && navigationAction.isForMainFrame) {
                     final uri = Uri.parse(url);
-                    if (await canLaunchUrl(uri)) {
-                      await launchUrl(uri, mode: LaunchMode.externalApplication);
-                    }
+                    if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                     return NavigationActionPolicy.CANCEL;
                   }
                   return NavigationActionPolicy.ALLOW;
@@ -585,15 +455,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       children: [
                         Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 64),
                         SizedBox(height: 16),
-                        Text('Auspoty',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 28,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 2)),
+                        Text('Auspoty', style: TextStyle(color: Colors.white, fontSize: 28,
+                            fontWeight: FontWeight.bold, letterSpacing: 2)),
                         SizedBox(height: 24),
-                        CircularProgressIndicator(
-                            color: Color(0xFFa78bfa), strokeWidth: 2),
+                        CircularProgressIndicator(color: Color(0xFFa78bfa), strokeWidth: 2),
                       ],
                     ),
                   ),
@@ -608,34 +473,22 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   Future<void> _injectAll(InAppWebViewController controller) async {
     await controller.evaluateJavascript(source: r'''
       (function(){
-        var id = '__auspoty_fix__';
-        var old = document.getElementById(id);
+        var id='__auspoty_fix__', old=document.getElementById(id);
         if(old) old.remove();
-        var s = document.createElement('style');
-        s.id = id;
-        s.textContent = `
-          .bottom-nav {
-            position: fixed !important; bottom: 0 !important;
-            left: 0 !important; right: 0 !important;
-            height: 60px !important; display: flex !important;
-            justify-content: space-around !important; align-items: center !important;
-            padding: 0 !important; background: rgba(10,10,15,0.95) !important;
-            backdrop-filter: blur(30px) !important;
-            border-top: 1px solid rgba(255,255,255,0.1) !important;
-            z-index: 1000 !important;
-          }
-          .nav-item {
-            display: flex !important; flex-direction: column !important;
-            align-items: center !important; justify-content: center !important;
-            gap: 3px !important; font-size: 10px !important;
-            min-width: 60px !important; height: 60px !important;
-            cursor: pointer !important; color: rgba(255,255,255,0.5) !important;
-          }
-          .nav-item.active { color: #a78bfa !important; }
-          .nav-item svg { width: 22px !important; height: 22px !important; fill: currentColor !important; }
-          body { padding-bottom: 160px !important; }
-          .mini-player { bottom: 68px !important; }
-          .toast-notification.show { bottom: 80px !important; }
+        var s=document.createElement('style'); s.id=id;
+        s.textContent=`
+          .bottom-nav{position:fixed!important;bottom:0!important;left:0!important;right:0!important;
+            height:60px!important;display:flex!important;justify-content:space-around!important;
+            align-items:center!important;padding:0!important;background:rgba(10,10,15,0.95)!important;
+            backdrop-filter:blur(30px)!important;border-top:1px solid rgba(255,255,255,0.1)!important;z-index:1000!important;}
+          .nav-item{display:flex!important;flex-direction:column!important;align-items:center!important;
+            justify-content:center!important;gap:3px!important;font-size:10px!important;
+            min-width:60px!important;height:60px!important;cursor:pointer!important;color:rgba(255,255,255,0.5)!important;}
+          .nav-item.active{color:#a78bfa!important;}
+          .nav-item svg{width:22px!important;height:22px!important;fill:currentColor!important;}
+          body{padding-bottom:160px!important;}
+          .mini-player{bottom:68px!important;}
+          .toast-notification.show{bottom:80px!important;}
         `;
         document.head.appendChild(s);
       })();
@@ -644,67 +497,49 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     await controller.evaluateJavascript(source: '''
       (function(){
         window.AndroidBridge = {
-          onMusicPlay: function(t, a){
-            window.flutter_inappwebview.callHandler('onMusicPlay', t, a);
-          },
-          onMusicPause: function(){
-            window.flutter_inappwebview.callHandler('onMusicPause');
-          },
+          onMusicPlay: function(t,a){ window.flutter_inappwebview.callHandler('onMusicPlay',t,a); },
+          onMusicPause: function(){ window.flutter_inappwebview.callHandler('onMusicPause'); },
           isAndroid: function(){ return true; },
-          openDownload: function(videoId, title){
-            window.flutter_inappwebview.callHandler('downloadTrack', videoId, title || '');
-          },
+          openDownload: function(videoId,title){ window.flutter_inappwebview.callHandler('downloadTrack',videoId,title||''); },
           logout: function(){
             localStorage.removeItem('auspotyGoogleUser');
-            if(typeof updateProfileUI === 'function') updateProfileUI();
-            if(typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+            if(typeof updateProfileUI==='function') updateProfileUI();
+            if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
           },
-          playNative: function(videoId, title, artist, thumbnail){
-            window.flutter_inappwebview.callHandler('playNative', videoId, title||'', artist||'', thumbnail||'');
+          playNative: function(videoId,title,artist,thumbnail){
+            window.flutter_inappwebview.callHandler('playNative',videoId,title||'',artist||'',thumbnail||'');
           },
-          pauseNative: function(){
-            window.flutter_inappwebview.callHandler('nativePause');
-          },
-          resumeNative: function(){
-            window.flutter_inappwebview.callHandler('nativeResume');
-          },
-          seekNative: function(pct){
-            window.flutter_inappwebview.callHandler('nativeSeek', pct);
-          }
+          pauseNative: function(){ window.flutter_inappwebview.callHandler('nativePause'); },
+          resumeNative: function(){ window.flutter_inappwebview.callHandler('nativeResume'); },
+          seekNative: function(pct){ window.flutter_inappwebview.callHandler('nativeSeek',pct); }
         };
 
-        window._nativePlaying = false;
-        window._nativeLoading = false;
+        window._nativePlaying=false;
+        window._nativeLoading=false;
 
-        // Patch togglePlay untuk native mode
-        var _origTogglePlay = window.togglePlay;
-        window.togglePlay = function(){
-          if(window._nativePlaying || window._nativeLoading){
+        var _origTogglePlay=window.togglePlay;
+        window.togglePlay=function(){
+          if(window._nativePlaying||window._nativeLoading){
             if(window._nativePlaying){
               window.AndroidBridge.pauseNative();
-              window._nativePlaying = false;
-              if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(false);
+              window._nativePlaying=false;
+              if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(false);
             } else {
               window.AndroidBridge.resumeNative();
-              window._nativePlaying = true;
-              if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(true);
+              window._nativePlaying=true;
+              if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
             }
-          } else if(typeof _origTogglePlay === 'function'){
-            _origTogglePlay();
-          }
+          } else if(typeof _origTogglePlay==='function'){ _origTogglePlay(); }
         };
 
-        // Patch seekTo untuk native mode
-        var _origSeekTo = window.seekTo;
-        window.seekTo = function(value){
-          if(window._nativePlaying || window._nativeLoading){
+        var _origSeekTo=window.seekTo;
+        window.seekTo=function(value){
+          if(window._nativePlaying||window._nativeLoading){
             window.AndroidBridge.seekNative(value);
-          } else if(typeof _origSeekTo === 'function'){
-            _origSeekTo(value);
-          }
+          } else if(typeof _origSeekTo==='function'){ _origSeekTo(value); }
         };
 
-        console.log('[Auspoty] Bridge v5.0 audio_service ready');
+        console.log('[Auspoty] Bridge v6.0 ExoPlayer native ready');
       })();
     ''');
   }

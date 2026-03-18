@@ -1,83 +1,66 @@
 from http.server import BaseHTTPRequestHandler
-import json, urllib.request, urllib.parse, re
-
-# Ambil direct audio stream URL dari YouTube tanpa yt-dlp
-# Pakai YouTube's internal API (sama yang dipakai ytmusicapi)
-
-INNERTUBE_KEY = 'AIzaSyA8eiZmM1FaDVjRy-df2KTyQ_vz_yYM39w'
-INNERTUBE_CLIENT = {
-    'clientName': 'ANDROID_MUSIC',
-    'clientVersion': '6.42.52',
-    'androidSdkVersion': 30,
-    'userAgent': 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 11) gzip',
-    'hl': 'id',
-    'gl': 'ID',
-}
+import json, urllib.parse
 
 def get_stream_url(video_id):
-    url = 'https://music.youtube.com/youtubei/v1/player?key=' + INNERTUBE_KEY
-    payload = json.dumps({
-        'videoId': video_id,
-        'context': {
-            'client': INNERTUBE_CLIENT
-        },
-        'playbackContext': {
-            'contentPlaybackContext': {
-                'signatureTimestamp': 19950
+    import yt_dlp
+
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'quiet': True,
+        'no_warnings': True,
+        'extract_flat': False,
+        'skip_download': True,
+        'noplaylist': True,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android_music', 'android', 'web'],
             }
-        }
-    }).encode()
+        },
+    }
 
-    req = urllib.request.Request(
-        url,
-        data=payload,
-        headers={
-            'Content-Type': 'application/json',
-            'User-Agent': INNERTUBE_CLIENT['userAgent'],
-            'X-Goog-Api-Key': INNERTUBE_KEY,
-            'Origin': 'https://music.youtube.com',
-            'Referer': 'https://music.youtube.com/',
-        }
-    )
+    url = f'https://www.youtube.com/watch?v={video_id}'
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
 
-    resp = urllib.request.urlopen(req, timeout=15)
-    data = json.loads(resp.read().decode())
+    # Ambil format audio terbaik
+    formats = info.get('formats', [])
+    audio_formats = [
+        f for f in formats
+        if f.get('vcodec') == 'none'
+        and f.get('acodec') not in ('none', None)
+        and f.get('url')
+        and f.get('ext') not in ('mhtml', 'none', None)
+        and 'storyboard' not in (f.get('url') or '')
+    ]
 
-    # Ambil streaming formats
-    formats = data.get('streamingData', {}).get('adaptiveFormats', [])
-    if not formats:
-        formats = data.get('streamingData', {}).get('formats', [])
-
-    # Filter audio only, pilih kualitas terbaik
-    audio_formats = [f for f in formats if f.get('mimeType', '').startswith('audio/')]
     if not audio_formats:
-        raise Exception('No audio formats found')
+        # Fallback: format dengan audio apapun
+        audio_formats = [
+            f for f in formats
+            if f.get('url')
+            and f.get('acodec') not in ('none', None)
+            and f.get('ext') not in ('mhtml',)
+            and 'storyboard' not in (f.get('url') or '')
+        ]
 
-    # Sort by bitrate descending
-    audio_formats.sort(key=lambda x: x.get('bitrate', 0), reverse=True)
-    best = audio_formats[0]
+    if not audio_formats:
+        raise Exception('No playable format found')
 
-    stream_url = best.get('url')
-    if not stream_url:
-        raise Exception('No direct URL (cipher protected)')
+    # Pilih m4a/mp4 dulu, fallback ke webm
+    m4a = [f for f in audio_formats if 'm4a' in f.get('ext', '') or 'mp4' in f.get('ext', '')]
+    chosen = sorted(m4a or audio_formats, key=lambda x: (x.get('abr') or x.get('tbr') or 0), reverse=True)[0]
 
-    # Ambil title dari videoDetails
-    title = data.get('videoDetails', {}).get('title', video_id)
-    author = data.get('videoDetails', {}).get('author', '')
-    duration = int(data.get('videoDetails', {}).get('lengthSeconds', 0))
-    thumbnail = ''
-    thumbs = data.get('videoDetails', {}).get('thumbnail', {}).get('thumbnails', [])
-    if thumbs:
-        thumbnail = thumbs[-1]['url']
+    thumbs = info.get('thumbnails', [])
+    thumbnail = thumbs[-1]['url'] if thumbs else ''
 
     return {
-        'url': stream_url,
-        'title': title,
-        'artist': author,
-        'duration': duration,
+        'url': chosen['url'],
+        'title': info.get('title', video_id),
+        'artist': info.get('uploader', info.get('channel', '')),
+        'duration': int(info.get('duration', 0)),
         'thumbnail': thumbnail,
-        'mimeType': best.get('mimeType', 'audio/mp4'),
-        'bitrate': best.get('bitrate', 0),
+        'mimeType': f"audio/{chosen.get('ext', 'mp4')}",
+        'bitrate': int(chosen.get('abr', 0) or chosen.get('tbr', 0) or 0),
     }
 
 
@@ -96,8 +79,7 @@ class handler(BaseHTTPRequestHandler):
             self._json(500, {'status': 'error', 'message': str(e)[:300]})
 
     def do_GET(self):
-        from urllib.parse import urlparse, parse_qs
-        params = parse_qs(urlparse(self.path).query)
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         video_id = params.get('videoId', [''])[0].strip()
         if not video_id:
             self._json(400, {'status': 'error', 'message': 'videoId required'})
