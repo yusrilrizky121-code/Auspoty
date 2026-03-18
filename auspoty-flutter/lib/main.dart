@@ -60,6 +60,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     with WidgetsBindingObserver {
   InAppWebViewController? _webViewController;
   bool _isLoading = true;
+  bool _wasInBackground = false;
   Timer? _keepAliveTimer;
   DateTime? _lastBackPress;
 
@@ -78,7 +79,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.paused) {
+      _wasInBackground = true;
+    }
+    if (state == AppLifecycleState.resumed && _wasInBackground) {
+      _wasInBackground = false;
       _webViewController?.evaluateJavascript(source: '''
         (function(){
           if(typeof _bgAudioCtx!=='undefined'&&_bgAudioCtx&&_bgAudioCtx.state==='suspended'){
@@ -269,9 +274,15 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   controller.addJavaScriptHandler(
                     handlerName: 'openGoogleLogin',
                     callback: (args) async {
-                      await _webViewController?.evaluateJavascript(source: '''
-                        if(typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
-                      ''');
+                      // Buka halaman login di Chrome eksternal
+                      // Setelah login, user balik ke app dan WebView reload
+                      const loginUrl = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/?login=1';
+                      await launchUrl(Uri.parse(loginUrl),
+                          mode: LaunchMode.externalApplication);
+                      // Setelah user balik ke app, reload WebView supaya
+                      // Firebase onAuthStateChanged trigger dengan session baru
+                      await Future.delayed(const Duration(seconds: 2));
+                      await _webViewController?.reload();
                     },
                   );
                   controller.addJavaScriptHandler(

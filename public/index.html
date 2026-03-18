@@ -33,6 +33,9 @@
       provider.addScope('email');
       provider.addScope('profile');
 
+      // Expose auth ke window supaya bisa diakses dari Flutter inject
+      window._firebaseAuth = auth;
+
       // Deteksi apakah di dalam WebView Android (AuspotyApp)
       const isAuspotyApp = navigator.userAgent.includes('AuspotyApp');
 
