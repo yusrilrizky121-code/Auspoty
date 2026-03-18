@@ -187,10 +187,20 @@ public class MainActivity extends AppCompatActivity {
                         "(function(){" +
                         "  if(typeof ytPlayer!=='undefined'&&ytPlayer&&typeof ytPlayer.getPlayerState==='function'){" +
                         "    var s=ytPlayer.getPlayerState();" +
-                        "    if(s===0){" + // ENDED
-                        "      if(typeof isRepeat!=='undefined'&&isRepeat){ytPlayer.seekTo(0);ytPlayer.playVideo();}" +
-                        "      else if(typeof playNextSimilarSong==='function'){playNextSimilarSong();}" +
-                        "    } else if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){" + // PAUSED tapi harusnya playing
+                        // ENDED — gunakan flag _bgEndedHandling agar tidak double-trigger
+                        "    if(s===0&&!window._bgEndedHandling){" +
+                        "      window._bgEndedHandling=true;" +
+                        "      if(typeof isRepeat!=='undefined'&&isRepeat){" +
+                        "        ytPlayer.seekTo(0);ytPlayer.playVideo();" +
+                        "        setTimeout(function(){window._bgEndedHandling=false;},3000);" +
+                        "      } else if(typeof playNextSimilarSong==='function'){" +
+                        "        playNextSimilarSong();" +
+                        "        setTimeout(function(){window._bgEndedHandling=false;},5000);" +
+                        "      }" +
+                        "    } else if(s===1||s===3){" +
+                        // Playing atau buffering — reset flag
+                        "      window._bgEndedHandling=false;" +
+                        "    } else if(s===2&&typeof isPlaying!=='undefined'&&isPlaying){" +
                         "      ytPlayer.playVideo();" +
                         "    }" +
                         "  }" +

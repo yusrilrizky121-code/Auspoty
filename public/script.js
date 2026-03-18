@@ -67,11 +67,20 @@ function _bgStartKeepAlive() {
             // State -1=unstarted, 0=ended, 1=playing, 2=paused, 3=buffering, 5=cued
             if (state === 0) {
                 // Lagu ended tapi belum di-handle (mungkin event terlewat di background)
-                if (typeof isRepeat !== 'undefined' && isRepeat) {
-                    ytPlayer.seekTo(0); ytPlayer.playVideo();
-                } else if (typeof playNextSimilarSong === 'function') {
-                    playNextSimilarSong();
+                // Gunakan flag agar tidak dipanggil berkali-kali
+                if (!window._bgEndedHandling) {
+                    window._bgEndedHandling = true;
+                    if (typeof isRepeat !== 'undefined' && isRepeat) {
+                        ytPlayer.seekTo(0); ytPlayer.playVideo();
+                        setTimeout(function(){ window._bgEndedHandling = false; }, 3000);
+                    } else if (typeof playNextSimilarSong === 'function') {
+                        playNextSimilarSong();
+                        setTimeout(function(){ window._bgEndedHandling = false; }, 5000);
+                    }
                 }
+            } else if (state === 1 || state === 3) {
+                // Sedang playing atau buffering — reset flag
+                window._bgEndedHandling = false;
             } else if (state === 2 && typeof isPlaying !== 'undefined' && isPlaying) {
                 // Player paused tapi seharusnya playing — resume
                 ytPlayer.playVideo();
@@ -174,12 +183,14 @@ function onPlayerStateChange(event) {
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
         stopProgressBar();
+        window._bgEndedHandling = true; // set flag agar bg interval tidak double-trigger
         if (isRepeat && ytPlayer) {
-            // Ulangi lagu yang sama
             ytPlayer.seekTo(0);
             ytPlayer.playVideo();
+            setTimeout(function(){ window._bgEndedHandling = false; }, 3000);
         } else {
             playNextSimilarSong();
+            setTimeout(function(){ window._bgEndedHandling = false; }, 5000);
         }
     }
 }
@@ -199,7 +210,7 @@ let _autoQueue = [];       // queue lagu yang sudah di-fetch
 let _queueFetching = false;
 
 async function prefetchNextSongs(artist, currentVideoId) {
-    if (_queueFetching || _autoQueue.length >= 3) return;
+    if (_queueFetching || _autoQueue.length >= 5) return;
     _queueFetching = true;
     try {
         const res = await apiFetch('/api/search?query=' + encodeURIComponent(artist + ' official audio'));
@@ -224,12 +235,12 @@ function playNextSimilarSong() {
     // Ambil dari queue yang sudah di-fetch sebelumnya
     if (_autoQueue.length > 0) {
         const next = _autoQueue.shift(); // ambil dari depan
+        // Langsung refill queue sebelum playMusic (agar tidak kosong saat lagu berikutnya selesai)
+        prefetchNextSongs(next.artist, next.videoId);
         playMusic(next.videoId, encodeURIComponent(JSON.stringify(next)));
-        // Refill queue di background (tidak blocking)
-        setTimeout(() => prefetchNextSongs(next.artist, next.videoId), 500);
         return;
     }
-    // Fallback: coba fetch langsung (mungkin masih foreground)
+    // Fallback: coba fetch langsung
     _fetchAndPlayNext(currentTrack.artist, currentTrack.videoId);
 }
 
@@ -267,10 +278,13 @@ function playMusic(videoId, encodedData) {
     document.getElementById('totalTime').innerText = '0:00';
     if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
     // Pre-fetch lagu berikutnya di background saat lagu mulai
-    _autoQueue = []; // reset queue untuk artis baru
+    // JANGAN reset _autoQueue — pertahankan queue yang sudah ada
+    // Hanya refill jika queue hampir kosong
     setTimeout(() => {
-        if (currentTrack) prefetchNextSongs(currentTrack.artist, currentTrack.videoId);
-    }, 3000); // tunggu 3 detik setelah lagu mulai
+        if (currentTrack && _autoQueue.length < 2) {
+            prefetchNextSongs(currentTrack.artist, currentTrack.videoId);
+        }
+    }, 2000); // tunggu 2 detik setelah lagu mulai
 }
 function togglePlay() { if (!ytPlayer) return; isPlaying ? ytPlayer.pauseVideo() : ytPlayer.playVideo(); }
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
