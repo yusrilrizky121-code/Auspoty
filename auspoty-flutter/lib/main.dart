@@ -542,12 +542,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   controller.addJavaScriptHandler(
                     handlerName: 'openGoogleLogin',
                     callback: (args) async {
-                      // Buka login.html di Chrome — Chrome bisa handle Google popup
+                      // Buka login.html di dalam WebView — supaya redirect /?userData= bisa ditangkap
                       const loginUrl = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/login.html';
-                      final uri = Uri.parse(loginUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri, mode: LaunchMode.externalApplication);
-                      }
+                      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(loginUrl)));
                     },
                   );
                 },
@@ -559,6 +556,31 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                 onLoadStop: (controller, url) async {
                   setState(() => _isLoading = false);
                   final urlStr = url?.toString() ?? '';
+
+                  // Detect login callback dari login.html — userData di-pass via URL param
+                  if (urlStr.contains('userData=')) {
+                    final uri = Uri.parse(urlStr);
+                    final userData = uri.queryParameters['userData'];
+                    if (userData != null && userData.isNotEmpty) {
+                      // Inject userData ke localStorage WebView
+                      final escaped = userData.replaceAll("'", "\\'").replaceAll('"', '\\"');
+                      await controller.evaluateJavascript(source: '''
+                        (function(){
+                          try {
+                            var raw = decodeURIComponent("${Uri.encodeComponent(userData)}");
+                            localStorage.setItem('auspotyGoogleUser', raw);
+                            var parsed = JSON.parse(raw);
+                            if(typeof updateProfileUI === 'function') updateProfileUI();
+                            if(typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+                            if(typeof showToast === 'function') showToast('Selamat datang, ' + (parsed.name || '').split(' ')[0] + '!');
+                            // Bersihkan URL param
+                            history.replaceState(null, '', '/');
+                          } catch(e) { console.error('userData inject error:', e); }
+                        })()
+                      ''');
+                    }
+                  }
+
                   if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty) {
                     await _injectAll(controller);
                   }

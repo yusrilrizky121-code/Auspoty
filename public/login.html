@@ -35,7 +35,7 @@
     }
     .btn-google:hover { opacity: 0.9; }
     .btn-google img { width: 20px; height: 20px; }
-    .status { color: rgba(255,255,255,0.5); font-size: 13px; text-align: center; }
+    .status { color: rgba(255,255,255,0.5); font-size: 13px; text-align: center; padding: 0 20px; }
     .spinner {
       width: 32px; height: 32px;
       border: 3px solid rgba(167,139,250,0.3);
@@ -59,7 +59,7 @@
 
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-    import { getAuth, signInWithPopup, GoogleAuthProvider }
+    import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider }
       from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
     const firebaseConfig = {
@@ -77,66 +77,75 @@
     provider.addScope('email');
     provider.addScope('profile');
 
-    window.doLogin = async function() {
-      const btn = document.getElementById('btnLogin');
-      const spinner = document.getElementById('spinner');
-      const status = document.getElementById('status');
+    const statusEl = document.getElementById('status');
+    const spinner = document.getElementById('spinner');
+    const btn = document.getElementById('btnLogin');
 
-      btn.style.display = 'none';
-      spinner.style.display = 'block';
-      status.textContent = 'Membuka akun Google...';
+    function redirectWithUser(user) {
+      const userData = {
+        name: user.displayName || 'Pengguna Google',
+        email: user.email || '',
+        picture: user.photoURL || '',
+        sub: user.uid || '',
+      };
+      const encoded = encodeURIComponent(JSON.stringify(userData));
+      // Redirect ke halaman utama — WebView onLoadStop akan inject userData ke localStorage
+      window.location.replace('/?userData=' + encoded);
+    }
 
-      try {
-        const result = await signInWithPopup(auth, provider);
-        const user = result.user;
-        const userData = {
-          name: user.displayName || 'Pengguna Google',
-          email: user.email || '',
-          picture: user.photoURL || '',
-          sub: user.uid || '',
-        };
+    // Cek redirect result dulu (setelah signInWithRedirect kembali)
+    spinner.style.display = 'block';
+    btn.style.display = 'none';
+    statusEl.textContent = 'Memeriksa sesi...';
 
-        // Simpan ke localStorage — akan dibaca oleh WebView utama
-        localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-        localStorage.setItem('auspotyLoginSuccess', Date.now().toString());
-
-        status.textContent = 'Login berhasil! Kembali ke app...';
-        spinner.style.display = 'none';
-
-        // Tutup halaman ini dan balik ke app
-        // window.close() works kalau dibuka via Custom Tab
-        setTimeout(() => {
-          window.close();
-          // Fallback: redirect ke halaman utama
-          window.location.href = '/';
-        }, 1000);
-
-      } catch(e) {
+    getRedirectResult(auth).then((result) => {
+      if (result && result.user) {
+        statusEl.textContent = 'Login berhasil! Kembali ke app...';
+        redirectWithUser(result.user);
+      } else {
+        // Tidak ada redirect result — tampilkan tombol login
         spinner.style.display = 'none';
         btn.style.display = 'flex';
-        status.textContent = 'Login gagal: ' + (e.message || e.code || 'Coba lagi');
-        console.error(e);
+        statusEl.textContent = '';
+      }
+    }).catch((e) => {
+      console.error('redirect result error:', e);
+      spinner.style.display = 'none';
+      btn.style.display = 'flex';
+      statusEl.textContent = '';
+    });
+
+    window.doLogin = async function() {
+      btn.style.display = 'none';
+      spinner.style.display = 'block';
+      statusEl.textContent = 'Membuka akun Google...';
+
+      try {
+        // Coba popup dulu
+        const result = await signInWithPopup(auth, provider);
+        statusEl.textContent = 'Login berhasil! Kembali ke app...';
+        redirectWithUser(result.user);
+      } catch(e) {
+        const blocked = ['auth/popup-blocked', 'auth/popup-closed-by-user',
+                         'auth/cancelled-popup-request', 'auth/operation-not-supported-in-this-environment'];
+        if (blocked.includes(e.code)) {
+          // Popup diblokir (WebView) — pakai redirect
+          statusEl.textContent = 'Mengalihkan ke Google...';
+          try {
+            await signInWithRedirect(auth, provider);
+          } catch(e2) {
+            spinner.style.display = 'none';
+            btn.style.display = 'flex';
+            statusEl.textContent = 'Login gagal: ' + (e2.message || e2.code || 'Coba lagi');
+          }
+        } else {
+          spinner.style.display = 'none';
+          btn.style.display = 'flex';
+          statusEl.textContent = 'Login gagal: ' + (e.message || e.code || 'Coba lagi');
+          console.error(e);
+        }
       }
     };
-
-    // Auto-login kalau sudah ada session
-    auth.onAuthStateChanged((user) => {
-      if (user) {
-        const userData = {
-          name: user.displayName || 'Pengguna Google',
-          email: user.email || '',
-          picture: user.photoURL || '',
-          sub: user.uid || '',
-        };
-        localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
-        localStorage.setItem('auspotyLoginSuccess', Date.now().toString());
-        document.getElementById('status').textContent = 'Sudah login! Kembali ke app...';
-        setTimeout(() => {
-          window.close();
-          window.location.href = '/';
-        }, 800);
-      }
-    });
   </script>
 </body>
 </html>
