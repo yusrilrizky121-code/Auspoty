@@ -1217,6 +1217,32 @@ function openHistoryView() {
 }
 
 
+
+// GOOGLE USER HELPER
+function getGoogleUser() {
+    try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; }
+}
+
+// UPDATE PROFILE UI
+function updateProfileUI() {
+    var user = getGoogleUser();
+    var s = getSettings();
+    var name = user ? user.name : (s.profileName || 'Pengguna Auspoty');
+    var pic = user ? user.picture : (localStorage.getItem('auspotyCustomPhoto') || '');
+    var pname = document.getElementById('settingsProfileName');
+    if (pname) pname.innerText = name;
+    var pav = document.getElementById('settingsAvatar');
+    if (pav) {
+        if (pic) { pav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; }
+        else { pav.innerHTML = ''; pav.innerText = name.charAt(0).toUpperCase(); }
+    }
+    var hav = document.querySelector('.app-avatar');
+    if (hav) {
+        if (pic) { hav.innerHTML = '<img src="' + pic + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; }
+        else { hav.innerHTML = ''; hav.innerText = name.charAt(0).toUpperCase(); }
+    }
+}
+
 // INIT
 applyAllSettings();
 updateProfileUI();
