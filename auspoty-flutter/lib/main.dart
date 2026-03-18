@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
@@ -6,17 +7,44 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
 
 const _musicChannel = MethodChannel('com.auspoty.app/music');
 
 final FlutterLocalNotificationsPlugin _notif = FlutterLocalNotificationsPlugin();
+
+// Callback untuk aksi notifikasi (play/pause dari notifikasi)
+@pragma('vm:entry-point')
+void notificationTapBackground(NotificationResponse response) {}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   const AndroidInitializationSettings androidInit =
       AndroidInitializationSettings('@mipmap/ic_launcher');
-  await _notif.initialize(const InitializationSettings(android: androidInit));
+  await _notif.initialize(
+    const InitializationSettings(android: androidInit),
+    onDidReceiveNotificationResponse: (response) {
+      // Aksi dari notifikasi — diteruskan ke WebView via channel
+      _handleNotifAction(response.actionId);
+    },
+    onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+  );
+
+  // Buat notification channel untuk musik
+  const AndroidNotificationChannel musicChannel = AndroidNotificationChannel(
+    'auspoty_music',
+    'Musik Sedang Diputar',
+    description: 'Kontrol musik Auspoty',
+    importance: Importance.low,
+    playSound: false,
+    enableVibration: false,
+  );
+  await _notif
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(musicChannel);
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -26,6 +54,33 @@ void main() async {
   ));
 
   runApp(const AuspotyApp());
+}
+
+// Global reference ke WebView controller untuk aksi notifikasi
+InAppWebViewController? _globalWebController;
+bool _globalIsPlaying = false;
+
+void _handleNotifAction(String? actionId) {
+  if (_globalWebController == null) return;
+  switch (actionId) {
+    case 'play_pause':
+      if (_globalIsPlaying) {
+        _globalWebController!.evaluateJavascript(
+            source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.pauseVideo();");
+      } else {
+        _globalWebController!.evaluateJavascript(
+            source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.playVideo();");
+      }
+      break;
+    case 'next':
+      _globalWebController!.evaluateJavascript(
+          source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
+      break;
+    case 'prev':
+      _globalWebController!.evaluateJavascript(
+          source: "if(typeof playPrevSong==='function') playPrevSong(); else if(typeof songHistory!=='undefined'&&songHistory.length>1){ var t=songHistory[songHistory.length-2]; if(t) playMusicById(t.videoId); }");
+      break;
+  }
 }
 
 class AuspotyApp extends StatelessWidget {
@@ -63,6 +118,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   Timer? _keepAliveTimer;
   DateTime? _lastBackPress;
 
+  String _nowTitle = 'Auspoty';
+  String _nowArtist = '';
+
   @override
   void initState() {
     super.initState();
@@ -80,12 +138,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       _wasInBackground = true;
-      // Beritahu native untuk tidak pause WebView
       _musicChannel.invokeMethod('keepWebViewAlive').catchError((_) {});
     }
     if (state == AppLifecycleState.resumed && _wasInBackground) {
       _wasInBackground = false;
-      // Resume AudioContext dan player jika perlu
       _webViewController?.evaluateJavascript(source: '''
         (function(){
           if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
@@ -93,9 +149,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           }
           if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
             var s = ytPlayer.getPlayerState();
-            if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying){
-              ytPlayer.playVideo();
-            }
+            if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying) ytPlayer.playVideo();
           }
         })()
       ''');
@@ -107,11 +161,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     _keepAliveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       _webViewController?.evaluateJavascript(source: '''
         (function(){
-          // Resume AudioContext kalau suspended
           if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
             window._keepAliveCtx.resume();
           }
-          // Handle lagu selesai
           if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
             var s = ytPlayer.getPlayerState();
             if(s === 0 && !window._bgEndedHandling){
@@ -134,19 +186,195 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     });
   }
 
-  void _showNowPlayingNotification(String title, String artist) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'auspoty_music', 'Musik Sedang Diputar',
-      channelDescription: 'Notifikasi musik Auspoty',
+  // Tampilkan notifikasi dengan tombol prev/play-pause/next
+  Future<void> _showMusicNotification(String title, String artist, bool playing) async {
+    final playPauseIcon = playing
+        ? '@android:drawable/ic_media_pause'
+        : '@android:drawable/ic_media_play';
+    final playPauseLabel = playing ? 'Pause' : 'Play';
+
+    final androidDetails = AndroidNotificationDetails(
+      'auspoty_music',
+      'Musik Sedang Diputar',
+      channelDescription: 'Kontrol musik Auspoty',
       importance: Importance.low,
       priority: Priority.low,
       ongoing: true,
       playSound: false,
       enableVibration: false,
       icon: '@mipmap/ic_launcher',
+      styleInformation: const MediaStyleInformation(
+        htmlFormatContent: false,
+        htmlFormatTitle: false,
+      ),
+      actions: [
+        AndroidNotificationAction(
+          'prev',
+          'Sebelumnya',
+          icon: DrawableResourceAndroidBitmap('@android:drawable/ic_media_previous'),
+          showsUserInterface: false,
+          cancelNotification: false,
+        ),
+        AndroidNotificationAction(
+          'play_pause',
+          playPauseLabel,
+          icon: DrawableResourceAndroidBitmap(playPauseIcon),
+          showsUserInterface: false,
+          cancelNotification: false,
+        ),
+        AndroidNotificationAction(
+          'next',
+          'Berikutnya',
+          icon: DrawableResourceAndroidBitmap('@android:drawable/ic_media_next'),
+          showsUserInterface: false,
+          cancelNotification: false,
+        ),
+      ],
     );
-    await _notif.show(1, title, artist,
-        const NotificationDetails(android: androidDetails));
+
+    await _notif.show(
+      1,
+      title,
+      artist,
+      NotificationDetails(android: androidDetails),
+    );
+  }
+
+  // Download MP3 langsung ke storage tanpa buka browser
+  Future<void> _downloadMp3(String videoId, String title) async {
+    // Minta izin storage
+    if (Platform.isAndroid) {
+      final status = await Permission.storage.request();
+      if (!status.isGranted) {
+        // Android 13+ tidak perlu storage permission untuk Downloads folder
+        // Lanjut saja
+      }
+    }
+
+    // Tampilkan notifikasi progress download
+    await _notif.show(
+      2,
+      'Mengunduh...',
+      title,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'auspoty_download',
+          'Download Musik',
+          channelDescription: 'Progress download lagu',
+          importance: Importance.low,
+          priority: Priority.low,
+          ongoing: true,
+          playSound: false,
+          enableVibration: false,
+          showProgress: true,
+          maxProgress: 100,
+          progress: 0,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+    );
+
+    try {
+      // Panggil API download untuk dapat URL MP3
+      final apiUrl = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/api/download';
+      final apiResp = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: '{"videoId":"$videoId"}',
+      ).timeout(const Duration(seconds: 60));
+
+      if (apiResp.statusCode != 200) {
+        throw Exception('API error ${apiResp.statusCode}');
+      }
+
+      final body = apiResp.body;
+      // Parse JSON manual (hindari import dart:convert yang berat)
+      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
+      final titleMatch = RegExp(r'"title"\s*:\s*"([^"]+)"').firstMatch(body);
+      if (urlMatch == null) throw Exception('URL tidak ditemukan');
+
+      final mp3Url = urlMatch.group(1)!.replaceAll(r'\/', '/');
+      final mp3Title = titleMatch?.group(1) ?? title;
+
+      // Update notifikasi progress
+      await _notif.show(
+        2,
+        'Mengunduh...',
+        mp3Title,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'auspoty_download',
+            'Download Musik',
+            importance: Importance.low,
+            priority: Priority.low,
+            ongoing: true,
+            playSound: false,
+            enableVibration: false,
+            showProgress: true,
+            maxProgress: 100,
+            progress: 50,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+      );
+
+      // Download file MP3
+      final dlResp = await http.get(Uri.parse(mp3Url)).timeout(const Duration(seconds: 120));
+      if (dlResp.statusCode != 200) throw Exception('Download gagal ${dlResp.statusCode}');
+
+      // Simpan ke Downloads folder
+      final dir = await getExternalStorageDirectory();
+      final downloadsPath = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
+      final savePath = '${downloadsPath}Download/${_sanitizeFilename(mp3Title)}.mp3';
+      final file = File(savePath);
+      await file.parent.create(recursive: true);
+      await file.writeAsBytes(dlResp.bodyBytes);
+
+      // Notifikasi selesai
+      await _notif.cancel(2);
+      await _notif.show(
+        3,
+        'Download selesai',
+        mp3Title,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'auspoty_download',
+            'Download Musik',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            playSound: true,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+      );
+
+      // Beritahu WebView
+      _webViewController?.evaluateJavascript(
+          source: "showToast('Download selesai: $mp3Title');");
+
+    } catch (e) {
+      await _notif.cancel(2);
+      await _notif.show(
+        3,
+        'Download gagal',
+        e.toString().length > 60 ? e.toString().substring(0, 60) : e.toString(),
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'auspoty_download',
+            'Download Musik',
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            icon: '@mipmap/ic_launcher',
+          ),
+        ),
+      );
+      _webViewController?.evaluateJavascript(
+          source: "showToast('Download gagal, coba lagi');");
+    }
+  }
+
+  String _sanitizeFilename(String name) {
+    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
   }
 
   Future<bool> _handleBackPress() async {
@@ -239,21 +467,27 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   cacheMode: CacheMode.LOAD_DEFAULT,
                   hardwareAcceleration: true,
                   transparentBackground: false,
-                  // Izinkan third-party cookies supaya Google login bisa simpan session
                   thirdPartyCookiesEnabled: true,
                   userAgent:
                       'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                  thirdPartyCookiesEnabled: true,
+                  javaScriptCanOpenWindowsAutomatically: true,
+                  supportMultipleWindows: true,
                 ),
                 onWebViewCreated: (controller) {
                   _webViewController = controller;
+                  _globalWebController = controller;
 
                   controller.addJavaScriptHandler(
                     handlerName: 'onMusicPlay',
                     callback: (args) {
                       final title = args.isNotEmpty ? args[0].toString() : 'Auspoty';
                       final artist = args.length > 1 ? args[1].toString() : '';
+                      _nowTitle = title;
+                      _nowArtist = artist;
+                      _globalIsPlaying = true;
                       WakelockPlus.enable();
-                      _showNowPlayingNotification(title, artist);
+                      _showMusicNotification(title, artist, true);
                       _startKeepAlive();
                       _musicChannel.invokeMethod('startMusicService', {
                         'title': title,
@@ -264,7 +498,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
                   controller.addJavaScriptHandler(
                     handlerName: 'onMusicPause',
-                    callback: (args) => WakelockPlus.disable(),
+                    callback: (args) {
+                      _globalIsPlaying = false;
+                      WakelockPlus.disable();
+                      _showMusicNotification(_nowTitle, _nowArtist, false);
+                    },
                   );
 
                   controller.addJavaScriptHandler(
@@ -272,6 +510,19 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                     callback: (args) => true,
                   );
 
+                  // Download langsung ke storage — tidak buka browser
+                  controller.addJavaScriptHandler(
+                    handlerName: 'downloadTrack',
+                    callback: (args) async {
+                      final videoId = args.isNotEmpty ? args[0].toString() : '';
+                      final title = args.length > 1 ? args[1].toString() : 'lagu';
+                      if (videoId.isNotEmpty) {
+                        _downloadMp3(videoId, title);
+                      }
+                    },
+                  );
+
+                  // Fallback openDownload (buka browser) — tetap ada untuk web
                   controller.addJavaScriptHandler(
                     handlerName: 'openDownload',
                     callback: (args) async {
@@ -292,6 +543,17 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       return prefs.getString('accountName') ?? '';
                     },
                   );
+                  controller.addJavaScriptHandler(
+                    handlerName: 'openGoogleLogin',
+                    callback: (args) async {
+                      // Buka login.html di Chrome — Chrome bisa handle Google popup
+                      const loginUrl = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app/login.html';
+                      final uri = Uri.parse(loginUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                  );
                 },
 
                 onLoadStart: (controller, url) {
@@ -301,10 +563,20 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                 onLoadStop: (controller, url) async {
                   setState(() => _isLoading = false);
                   final urlStr = url?.toString() ?? '';
-                  // Kalau sudah balik ke app URL setelah Google login, inject ulang
-                  if (urlStr.contains('vercel.app') || urlStr.contains('clone2')) {
+                  if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty) {
                     await _injectAll(controller);
                   }
+                },
+                onCreateWindow: (controller, createWindowAction) async {
+                  // Handle popup dari signInWithPopup Firebase
+                  final url = createWindowAction.request.url?.toString() ?? '';
+                  if (url.isNotEmpty && url != 'about:blank') {
+                    final uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  }
+                  return true;
                 },
 
                 onProgressChanged: (controller, progress) {
@@ -318,37 +590,24 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                   );
                 },
 
-                // Kontrol navigasi — Google login harus jalan di dalam WebView
                 shouldOverrideUrlLoading: (controller, navigationAction) async {
                   final url = navigationAction.request.url?.toString() ?? '';
 
-                  // URL-URL yang harus jalan di dalam WebView
                   final allowedInWebView = [
-                    'vercel.app',
-                    'youtube.com',
-                    'ytimg.com',
-                    'googleapis.com',
-                    'gstatic.com',
-                    'firebaseapp.com',
-                    'firebase.google.com',
-                    'accounts.google.com',  // Google login flow
-                    'google.com',
-                    'googleusercontent.com',
+                    'vercel.app', 'youtube.com', 'ytimg.com',
+                    'googleapis.com', 'gstatic.com', 'firebaseapp.com',
+                    'firebase.google.com', 'accounts.google.com',
+                    'google.com', 'googleusercontent.com',
                   ];
 
                   for (final domain in allowedInWebView) {
-                    if (url.contains(domain)) {
-                          return NavigationActionPolicy.ALLOW;
-                    }
+                    if (url.contains(domain)) return NavigationActionPolicy.ALLOW;
                   }
 
-                  if (url.startsWith('about:') ||
-                      url.startsWith('blob:') ||
-                      url.startsWith('data:')) {
+                  if (url.startsWith('about:') || url.startsWith('blob:') || url.startsWith('data:')) {
                     return NavigationActionPolicy.ALLOW;
                   }
 
-                  // Link eksternal lain — buka di browser
                   if (url.startsWith('http') && navigationAction.isForMainFrame) {
                     final uri = Uri.parse(url);
                     if (await canLaunchUrl(uri)) {
@@ -391,7 +650,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
   }
 
   Future<void> _injectAll(InAppWebViewController controller) async {
-    // CSS fix — nav bar tidak overlap konten
+    // CSS fix nav bar
     await controller.evaluateJavascript(source: r'''
       (function(){
         var id = '__auspoty_fix__';
@@ -401,39 +660,24 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
         s.id = id;
         s.textContent = `
           .bottom-nav {
-            position: fixed !important;
-            bottom: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            height: 60px !important;
-            display: flex !important;
-            justify-content: space-around !important;
-            align-items: center !important;
-            padding: 0 !important;
-            background: rgba(10,10,15,0.95) !important;
+            position: fixed !important; bottom: 0 !important;
+            left: 0 !important; right: 0 !important;
+            height: 60px !important; display: flex !important;
+            justify-content: space-around !important; align-items: center !important;
+            padding: 0 !important; background: rgba(10,10,15,0.95) !important;
             backdrop-filter: blur(30px) !important;
-            -webkit-backdrop-filter: blur(30px) !important;
             border-top: 1px solid rgba(255,255,255,0.1) !important;
             z-index: 1000 !important;
           }
           .nav-item {
-            display: flex !important;
-            flex-direction: column !important;
-            align-items: center !important;
-            justify-content: center !important;
-            gap: 3px !important;
-            font-size: 10px !important;
-            min-width: 60px !important;
-            height: 60px !important;
-            cursor: pointer !important;
-            color: rgba(255,255,255,0.5) !important;
+            display: flex !important; flex-direction: column !important;
+            align-items: center !important; justify-content: center !important;
+            gap: 3px !important; font-size: 10px !important;
+            min-width: 60px !important; height: 60px !important;
+            cursor: pointer !important; color: rgba(255,255,255,0.5) !important;
           }
           .nav-item.active { color: #a78bfa !important; }
-          .nav-item svg {
-            width: 22px !important;
-            height: 22px !important;
-            fill: currentColor !important;
-          }
+          .nav-item svg { width: 22px !important; height: 22px !important; fill: currentColor !important; }
           body { padding-bottom: 160px !important; }
           .mini-player { bottom: 68px !important; }
           .toast-notification.show { bottom: 80px !important; }
@@ -445,7 +689,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
     // AndroidBridge + AudioContext keep-alive
     await controller.evaluateJavascript(source: '''
       (function(){
-        // AndroidBridge
         window.AndroidBridge = {
           onMusicPlay: function(t, a){
             window.flutter_inappwebview.callHandler('onMusicPlay', t, a);
@@ -454,8 +697,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             window.flutter_inappwebview.callHandler('onMusicPause');
           },
           isAndroid: function(){ return true; },
-          openDownload: function(url){
-            window.flutter_inappwebview.callHandler('openDownload', url);
+          // Download langsung ke storage — panggil handler downloadTrack
+          openDownload: function(videoId, title){
+            window.flutter_inappwebview.callHandler('downloadTrack', videoId, title || '');
           },
           logout: function(){
             localStorage.removeItem('auspotyGoogleUser');
@@ -464,7 +708,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           }
         };
 
-        // AudioContext keep-alive — cegah browser suspend audio di background
+        // AudioContext keep-alive
         if(!window._auspotyKeepAlive){
           window._auspotyKeepAlive = true;
           try {
@@ -479,7 +723,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           } catch(e) {}
         }
 
-        console.log('[Auspoty] Bridge v3.1 ready');
+        console.log('[Auspoty] Bridge v3.2 ready');
       })();
     ''');
   }

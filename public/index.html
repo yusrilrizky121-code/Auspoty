@@ -36,10 +36,11 @@
       // Expose auth ke window supaya bisa diakses dari Flutter inject
       window._firebaseAuth = auth;
 
-      // Deteksi apakah di dalam WebView Android (AuspotyApp)
-      const isAuspotyApp = navigator.userAgent.includes('AuspotyApp');
+      // Deteksi apakah di dalam WebView Android
+      // Cek AndroidBridge yang diinject Flutter — lebih reliable dari user agent
+      const isAuspotyApp = !!(window.AndroidBridge) || navigator.userAgent.includes('AuspotyApp');
 
-      // Handle redirect result saat halaman load (setelah redirect dari Google)
+      // Handle redirect result saat halaman load
       getRedirectResult(auth).then((result) => {
         if (result && result.user) {
           const user = result.user;
@@ -58,9 +59,17 @@
 
       window._firebaseSignIn = async function() {
         try {
-          if (isAuspotyApp) {
-            // Di WebView: pakai redirect (bukan popup yang bikin layar putih)
-            await signInWithRedirect(auth, provider);
+          // Cek AndroidBridge saat dipanggil (bukan saat load) — lebih akurat
+          const inApp = !!(window.AndroidBridge);
+          if (inApp) {
+            // Di WebView: Google blokir signInWithRedirect & signInWithPopup
+            // Solusi: buka Custom Chrome Tab via Flutter, lalu reload WebView
+            if (typeof window.AndroidBridge.openGoogleLogin === 'function') {
+              window.AndroidBridge.openGoogleLogin();
+            } else {
+              if (typeof showToast === 'function') showToast('Membuka login Google...');
+              await signInWithRedirect(auth, provider);
+            }
           } else {
             // Di browser biasa: pakai popup
             const result = await signInWithPopup(auth, provider);
