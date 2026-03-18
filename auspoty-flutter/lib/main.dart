@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:http/http.dart' as http;
+import 'package:just_audio/just_audio.dart';
 
 const _musicChannel = MethodChannel('com.auspoty.app/music');
 
@@ -63,23 +65,87 @@ bool _globalIsPlaying = false;
 // KeepAlive token — WebView tidak di-dispose saat widget tree berubah
 final _webViewKeepAlive = InAppWebViewKeepAlive();
 
+// Native audio player — jalan di background tanpa WebView
+final _nativePlayer = AudioPlayer();
+bool _nativeMode = false; // true = pakai native player, false = pakai ytPlayer WebView
+
+const _apiBase = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
+
+// Fetch stream URL dari backend
+Future<Map<String, dynamic>?> _fetchStreamUrl(String videoId) async {
+  try {
+    final resp = await http.post(
+      Uri.parse('$_apiBase/api/stream'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'videoId': videoId}),
+    ).timeout(const Duration(seconds: 20));
+    if (resp.statusCode == 200) {
+      final data = jsonDecode(resp.body);
+      if (data['status'] == 'success') return data;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return null;
+}
+
+// Play audio natively — bypass WebView sepenuhnya
+Future<void> _playNative(String videoId, String title, String artist, String thumbnail) async {
+  try {
+    final data = await _fetchStreamUrl(videoId);
+    if (data == null) return;
+
+    final streamUrl = data['url'] as String;
+    final trackTitle = (data['title'] as String?) ?? title;
+    final trackArtist = (data['artist'] as String?) ?? artist;
+
+    await _nativePlayer.stop();
+    await _nativePlayer.setUrl(streamUrl);
+    await _nativePlayer.play();
+    _nativeMode = true;
+    _globalIsPlaying = true;
+
+    WakelockPlus.enable();
+
+    // Update notifikasi
+    _globalWebController?.evaluateJavascript(
+      source: "window.flutter_inappwebview.callHandler('onMusicPlay', '${trackTitle.replaceAll("'", "\\'")}', '${trackArtist.replaceAll("'", "\\'")}');",
+    );
+  } catch (e) {
+    // Fallback ke ytPlayer kalau native gagal
+    _nativeMode = false;
+  }
+}
+
 void _handleNotifAction(String? actionId) {
-  if (_globalWebController == null) return;
   switch (actionId) {
     case 'play_pause':
-      if (_globalIsPlaying) {
-        _globalWebController!.evaluateJavascript(
-            source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.pauseVideo();");
+      if (_nativeMode) {
+        if (_globalIsPlaying) {
+          _nativePlayer.pause();
+          _globalIsPlaying = false;
+        } else {
+          _nativePlayer.play();
+          _globalIsPlaying = true;
+        }
       } else {
-        _globalWebController!.evaluateJavascript(
-            source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.playVideo();");
+        if (_globalWebController == null) return;
+        if (_globalIsPlaying) {
+          _globalWebController!.evaluateJavascript(
+              source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.pauseVideo();");
+        } else {
+          _globalWebController!.evaluateJavascript(
+              source: "if(typeof ytPlayer!=='undefined'&&ytPlayer) ytPlayer.playVideo();");
+        }
       }
       break;
     case 'next':
+      if (_globalWebController == null) return;
       _globalWebController!.evaluateJavascript(
           source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
       break;
     case 'prev':
+      if (_globalWebController == null) return;
       _globalWebController!.evaluateJavascript(
           source: "if(typeof playPrevSong==='function') playPrevSong(); else if(typeof songHistory!=='undefined'&&songHistory.length>1){ var t=songHistory[songHistory.length-2]; if(t) playMusicById(t.videoId); }");
       break;
@@ -517,8 +583,127 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                     handlerName: 'onMusicPause',
                     callback: (args) {
                       _globalIsPlaying = false;
+                      if (_nativeMode) _nativePlayer.pause();
                       WakelockPlus.disable();
                       _showMusicNotification(_nowTitle, _nowArtist, false);
+                    },
+                  );
+
+                  // Handler utama: play audio natively via ExoPlayer
+                  controller.addJavaScriptHandler(
+                    handlerName: 'playNative',
+                    callback: (args) async {
+                      final videoId = args.isNotEmpty ? args[0].toString() : '';
+                      final title = args.length > 1 ? args[1].toString() : '';
+                      final artist = args.length > 2 ? args[2].toString() : '';
+                      final thumbnail = args.length > 3 ? args[3].toString() : '';
+                      if (videoId.isEmpty) return;
+
+                      _nowTitle = title;
+                      _nowArtist = artist;
+
+                      // Beritahu WebView bahwa native player sedang loading
+                      controller.evaluateJavascript(source: "window._nativeLoading = true;");
+
+                      await _playNative(videoId, title, artist, thumbnail);
+
+                      if (_nativeMode) {
+                        _showMusicNotification(title, artist, true);
+                        _musicChannel.invokeMethod('startMusicService', {
+                          'title': title,
+                          'artist': artist,
+                        }).catchError((_) {});
+                        // Beritahu WebView bahwa native player sudah play
+                        controller.evaluateJavascript(source: '''
+                          window._nativeLoading = false;
+                          window._nativePlaying = true;
+                          if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(true);
+                          if(typeof showToast === 'function') showToast('');
+                        ''');
+
+                        // Listen player state changes
+                        _nativePlayer.playerStateStream.listen((state) {
+                          if (state.processingState == ProcessingState.completed) {
+                            _globalIsPlaying = false;
+                            // Trigger next song di WebView
+                            controller.evaluateJavascript(source: '''
+                              window._nativePlaying = false;
+                              if(typeof isRepeat !== 'undefined' && isRepeat){
+                                window.flutter_inappwebview.callHandler('playNative', window.currentTrack?.videoId || '', window.currentTrack?.title || '', window.currentTrack?.artist || '', window.currentTrack?.img || '');
+                              } else if(typeof playNextSimilarSong === 'function'){
+                                playNextSimilarSong();
+                              }
+                            ''');
+                          } else if (state.playing) {
+                            _globalIsPlaying = true;
+                          }
+                        });
+
+                        // Update progress bar di WebView setiap detik
+                        _keepAliveTimer?.cancel();
+                        _keepAliveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+                          if (!_nativeMode) return;
+                          final pos = _nativePlayer.position.inSeconds;
+                          final dur = _nativePlayer.duration?.inSeconds ?? 0;
+                          if (dur > 0) {
+                            controller.evaluateJavascript(source: '''
+                              (function(){
+                                var pos = $pos, dur = $dur;
+                                var pct = (pos/dur)*100;
+                                var el = document.getElementById('progressBar');
+                                if(el) el.style.background = 'linear-gradient(to right, white '+pct+'%, rgba(255,255,255,0.2) '+pct+'%)';
+                                var ct = document.getElementById('currentTime');
+                                if(ct) ct.innerText = Math.floor(pos/60)+':'+(pos%60<10?'0':'')+(pos%60);
+                                var tt = document.getElementById('totalTime');
+                                if(tt) tt.innerText = Math.floor(dur/60)+':'+(dur%60<10?'0':'')+(dur%60);
+                              })()
+                            ''');
+                          }
+                        });
+                      } else {
+                        // Native gagal — fallback ke ytPlayer
+                        controller.evaluateJavascript(source: '''
+                          window._nativeLoading = false;
+                          window._nativePlaying = false;
+                          if(typeof ytPlayer !== 'undefined' && ytPlayer) ytPlayer.loadVideoById('$videoId');
+                        ''');
+                      }
+                    },
+                  );
+
+                  // Pause/resume native player dari WebView
+                  controller.addJavaScriptHandler(
+                    handlerName: 'nativePause',
+                    callback: (args) async {
+                      if (_nativeMode) {
+                        await _nativePlayer.pause();
+                        _globalIsPlaying = false;
+                        _showMusicNotification(_nowTitle, _nowArtist, false);
+                      }
+                    },
+                  );
+
+                  controller.addJavaScriptHandler(
+                    handlerName: 'nativeResume',
+                    callback: (args) async {
+                      if (_nativeMode) {
+                        await _nativePlayer.play();
+                        _globalIsPlaying = true;
+                        _showMusicNotification(_nowTitle, _nowArtist, true);
+                      }
+                    },
+                  );
+
+                  controller.addJavaScriptHandler(
+                    handlerName: 'nativeSeek',
+                    callback: (args) async {
+                      if (_nativeMode && args.isNotEmpty) {
+                        final pct = double.tryParse(args[0].toString()) ?? 0;
+                        final dur = _nativePlayer.duration?.inSeconds ?? 0;
+                        if (dur > 0) {
+                          await _nativePlayer.seek(Duration(seconds: (pct / 100 * dur).round()));
+                        }
+                      }
                     },
                   );
 
@@ -743,53 +928,87 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             localStorage.removeItem('auspotyGoogleUser');
             if(typeof updateProfileUI === 'function') updateProfileUI();
             if(typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+          },
+          // Play audio natively via ExoPlayer — bypass WebView audio
+          playNative: function(videoId, title, artist, thumbnail){
+            window.flutter_inappwebview.callHandler('playNative', videoId, title||'', artist||'', thumbnail||'');
+          },
+          pauseNative: function(){
+            window.flutter_inappwebview.callHandler('nativePause');
+          },
+          resumeNative: function(){
+            window.flutter_inappwebview.callHandler('nativeResume');
+          },
+          seekNative: function(pct){
+            window.flutter_inappwebview.callHandler('nativeSeek', pct);
           }
         };
 
-        // AudioContext keep-alive — cegah audio stop saat background
+        // Override playMusic supaya pakai native player
+        // Simpan original dulu
+        if(typeof playMusic === 'function' && !window._originalPlayMusic){
+          window._originalPlayMusic = playMusic;
+        }
+
+        // Override global playMusic
+        window._nativePlaying = false;
+        window._nativeLoading = false;
+
+        // Patch togglePlay supaya support native mode
+        var _origTogglePlay = window.togglePlay;
+        window.togglePlay = function(){
+          if(window._nativePlaying || window._nativeLoading){
+            if(window._nativePlaying){
+              window.AndroidBridge.pauseNative();
+              window._nativePlaying = false;
+              if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(false);
+            } else {
+              window.AndroidBridge.resumeNative();
+              window._nativePlaying = true;
+              if(typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(true);
+            }
+          } else if(typeof _origTogglePlay === 'function'){
+            _origTogglePlay();
+          }
+        };
+
+        // Patch seekTo supaya support native mode
+        var _origSeekTo = window.seekTo;
+        window.seekTo = function(value){
+          if(window._nativePlaying || window._nativeLoading){
+            window.AndroidBridge.seekNative(value);
+          } else if(typeof _origSeekTo === 'function'){
+            _origSeekTo(value);
+          }
+        };
+
+        // AudioContext keep-alive (tetap ada sebagai fallback)
         if(!window._auspotyKeepAlive){
           window._auspotyKeepAlive = true;
           try {
             var AudioCtx = window.AudioContext || window.webkitAudioContext;
             var ctx = new AudioCtx();
             window._keepAliveCtx = ctx;
-
             function startOscillator() {
               try {
                 var osc = ctx.createOscillator();
                 var gain = ctx.createGain();
-                gain.gain.value = 0.00001; // hampir tidak terdengar
+                gain.gain.value = 0.00001;
                 osc.connect(gain);
                 gain.connect(ctx.destination);
                 osc.start();
                 window._keepAliveOsc = osc;
               } catch(e) {}
             }
-
-            if(ctx.state === 'running') {
-              startOscillator();
-            } else {
-              ctx.resume().then(startOscillator).catch(function(){});
-            }
-
-            // Resume saat visibilitychange (screen on/off)
-            document.addEventListener('visibilitychange', function() {
-              if(ctx.state === 'suspended') {
-                ctx.resume().catch(function(){});
-              }
-            });
-
-            // Resume periodik setiap 500ms kalau suspended
+            if(ctx.state === 'running') startOscillator();
+            else ctx.resume().then(startOscillator).catch(function(){});
             setInterval(function() {
-              if(ctx.state === 'suspended') {
-                ctx.resume().catch(function(){});
-              }
+              if(ctx.state === 'suspended') ctx.resume().catch(function(){});
             }, 500);
-
-          } catch(e) { console.warn('[Auspoty] AudioContext error:', e); }
+          } catch(e) {}
         }
 
-        console.log('[Auspoty] Bridge v3.3 ready');
+        console.log('[Auspoty] Bridge v4.0 native audio ready');
       })();
     ''');
   }

@@ -281,7 +281,17 @@ function playMusic(videoId, encodedData) {
     document.getElementById('progressBar').value = 0;
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
-    if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    // Di Android APK — pakai native ExoPlayer supaya audio tetap jalan di background
+    if (window.AndroidBridge && typeof window.AndroidBridge.playNative === 'function') {
+        window._nativePlaying = false;
+        window._nativeLoading = true;
+        if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo();
+        window.AndroidBridge.playNative(videoId, currentTrack.title, currentTrack.artist, currentTrack.img || '');
+        isPlaying = true;
+        if (typeof updatePlayPauseBtn === 'function') updatePlayPauseBtn(true);
+    } else {
+        if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    }
     // Pre-fetch lagu berikutnya di background saat lagu mulai
     // JANGAN reset _autoQueue — pertahankan queue yang sudah ada
     // Hanya refill jika queue hampir kosong
