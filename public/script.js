@@ -1205,12 +1205,13 @@ async function submitComment() {
 // DOWNLOAD
 function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    const url = 'https://id.ytmp3.mobi/v1/#' + currentTrack.videoId;
     if (window.AndroidBridge && typeof window.AndroidBridge.openDownload === 'function') {
-        window.AndroidBridge.openDownload(url);
-        showToast('Membuka download di browser...');
+        // Di APK Flutter: download langsung ke storage tanpa buka browser
+        showToast('Mengunduh ' + (currentTrack.title || 'lagu') + '...');
+        window.AndroidBridge.openDownload(currentTrack.videoId, currentTrack.title || '');
     } else {
-        window.open(url, '_blank');
+        // Di browser biasa: buka halaman download
+        window.open('https://id.ytmp3.mobi/v1/#' + currentTrack.videoId, '_blank');
         showToast('Halaman download dibuka. Klik Konversi lalu Unduh MP3');
     }
 }
