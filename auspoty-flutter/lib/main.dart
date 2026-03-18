@@ -7,6 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+const _musicChannel = MethodChannel('com.auspoty.app/music');
+
 final FlutterLocalNotificationsPlugin _notif = FlutterLocalNotificationsPlugin();
 
 void main() async {
@@ -238,10 +240,16 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       WakelockPlus.enable();
                       _showNowPlayingNotification(title, artist);
                       _startKeepAlive();
+                      // Start foreground service supaya audio jalan di background
+                      _musicChannel.invokeMethod('startMusicService', {
+                        'title': title,
+                        'artist': artist,
+                      }).catchError((_) {});
                     },
                   );
                   controller.addJavaScriptHandler(
                     handlerName: 'onMusicPause',
+                    // Jangan stop service saat pause — biarkan tetap jalan
                     callback: (args) => WakelockPlus.disable(),
                   );
                   controller.addJavaScriptHandler(
@@ -292,6 +300,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                 },
                 shouldOverrideUrlLoading: (controller, navigationAction) async {
                   final url = navigationAction.request.url?.toString() ?? '';
+                  
+                  // Semua URL yang dibutuhkan app — allow di WebView
                   if (url.contains('vercel.app') ||
                       url.contains('youtube.com') ||
                       url.contains('ytimg.com') ||
@@ -300,10 +310,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
                       url.contains('firebaseapp.com') ||
                       url.contains('firebase.google.com') ||
                       url.contains('accounts.google.com') ||
-                      url.contains('google.com/recaptcha') ||
-                      url.startsWith('about:')) {
+                      url.contains('google.com') ||
+                      url.startsWith('about:') ||
+                      url.startsWith('blob:') ||
+                      url.startsWith('data:')) {
                     return NavigationActionPolicy.ALLOW;
                   }
+
+                  // Link eksternal lain — buka di browser
                   if (url.startsWith('http') && navigationAction.isForMainFrame) {
                     await launchUrl(Uri.parse(url),
                         mode: LaunchMode.externalApplication);

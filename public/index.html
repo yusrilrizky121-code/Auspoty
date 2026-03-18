@@ -14,7 +14,7 @@
     <!-- Firebase Auth SDK -->
     <script type="module">
       import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-      import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+      import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
 
       const firebaseConfig = {
@@ -30,10 +30,15 @@
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const provider = new GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
 
-      window._firebaseSignIn = async function() {
-        try {
-          const result = await signInWithPopup(auth, provider);
+      // Deteksi apakah di dalam WebView Android (AuspotyApp)
+      const isAuspotyApp = navigator.userAgent.includes('AuspotyApp');
+
+      // Handle redirect result saat halaman load (setelah redirect dari Google)
+      getRedirectResult(auth).then((result) => {
+        if (result && result.user) {
           const user = result.user;
           const userData = {
             name: user.displayName || 'Pengguna Google',
@@ -45,6 +50,29 @@
           if (typeof updateProfileUI === 'function') updateProfileUI();
           if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
           if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+        }
+      }).catch((e) => { console.log('redirect result:', e); });
+
+      window._firebaseSignIn = async function() {
+        try {
+          if (isAuspotyApp) {
+            // Di WebView: pakai redirect (bukan popup yang bikin layar putih)
+            await signInWithRedirect(auth, provider);
+          } else {
+            // Di browser biasa: pakai popup
+            const result = await signInWithPopup(auth, provider);
+            const user = result.user;
+            const userData = {
+              name: user.displayName || 'Pengguna Google',
+              email: user.email || '',
+              picture: user.photoURL || '',
+              sub: user.uid || '',
+            };
+            localStorage.setItem('auspotyGoogleUser', JSON.stringify(userData));
+            if (typeof updateProfileUI === 'function') updateProfileUI();
+            if (typeof updateGoogleLoginUI === 'function') updateGoogleLoginUI();
+            if (typeof showToast === 'function') showToast('Selamat datang, ' + userData.name.split(' ')[0] + '!');
+          }
         } catch(e) {
           console.error('Firebase login error:', e);
           if (typeof showToast === 'function') showToast('Login gagal: ' + (e.code || e.message));
