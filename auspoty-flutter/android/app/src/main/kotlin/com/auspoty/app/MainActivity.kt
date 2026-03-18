@@ -28,8 +28,6 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "keepWebViewAlive" -> {
-                    // Dipanggil dari Flutter saat app masuk background
-                    // Tidak perlu lakukan apa-apa di sini — cukup acknowledge
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -40,19 +38,44 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WebView.setWebContentsDebuggingEnabled(false)
-        // Start foreground service dari awal
         startMusicService("Auspoty", "Siap memutar musik")
     }
 
     override fun onPause() {
-        super.onPause()
-        // PENTING: Jangan panggil flutterView?.onPause() atau webView.onPause()
-        // Flutter engine akan pause WebView secara default — kita cegah dengan
-        // tidak memanggil apapun yang bisa pause WebView rendering/JS execution
+        // KRITIS: Jangan panggil super.onPause() yang akan pause Flutter engine
+        // Flutter engine default akan pause WebView JS execution saat onPause
+        // Kita bypass ini supaya audio tetap jalan di background
+        // Hanya panggil Activity.onPause() langsung, skip FlutterActivity.onPause()
+        try {
+            val activityClass = android.app.Activity::class.java
+            val onPauseMethod = activityClass.getDeclaredMethod("onPause")
+            onPauseMethod.isAccessible = true
+            onPauseMethod.invoke(this)
+        } catch (e: Exception) {
+            // Fallback: panggil super normal
+            super.onPause()
+        }
     }
 
     override fun onResume() {
         super.onResume()
+    }
+
+    override fun onStop() {
+        // Jangan panggil super.onStop() — Flutter akan pause engine
+        // Hanya panggil Activity.onStop()
+        try {
+            val activityClass = android.app.Activity::class.java
+            val onStopMethod = activityClass.getDeclaredMethod("onStop")
+            onStopMethod.isAccessible = true
+            onStopMethod.invoke(this)
+        } catch (e: Exception) {
+            super.onStop()
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
     }
 
     override fun onDestroy() {

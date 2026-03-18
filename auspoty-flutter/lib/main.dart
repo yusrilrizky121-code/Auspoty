@@ -136,33 +136,58 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
       _wasInBackground = true;
-      _musicChannel.invokeMethod('keepWebViewAlive').catchError((_) {});
-    }
-    if (state == AppLifecycleState.resumed && _wasInBackground) {
-      _wasInBackground = false;
+      // Inject JS sebelum app benar-benar background — resume AudioContext
       _webViewController?.evaluateJavascript(source: '''
         (function(){
-          if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
-            window._keepAliveCtx.resume();
-          }
-          if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
-            var s = ytPlayer.getPlayerState();
-            if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying) ytPlayer.playVideo();
-          }
+          try {
+            if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
+              window._keepAliveCtx.resume();
+            }
+            // Pastikan oscillator tetap jalan
+            if(!window._keepAliveOsc && window._keepAliveCtx) {
+              var osc = window._keepAliveCtx.createOscillator();
+              var gain = window._keepAliveCtx.createGain();
+              gain.gain.value = 0.00001;
+              osc.connect(gain);
+              gain.connect(window._keepAliveCtx.destination);
+              osc.start();
+              window._keepAliveOsc = osc;
+            }
+          } catch(e) {}
         })()
       ''');
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (_wasInBackground) {
+        _wasInBackground = false;
+        // Resume AudioContext dan cek state player
+        _webViewController?.evaluateJavascript(source: '''
+          (function(){
+            try {
+              if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
+                window._keepAliveCtx.resume();
+              }
+              if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
+                var s = ytPlayer.getPlayerState();
+                if(s === 2 && typeof isPlaying !== 'undefined' && isPlaying) ytPlayer.playVideo();
+              }
+            } catch(e) {}
+          })()
+        ''');
+      }
     }
   }
 
   void _startKeepAlive() {
     _keepAliveTimer?.cancel();
-    _keepAliveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+    _keepAliveTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) {
       _webViewController?.evaluateJavascript(source: '''
         (function(){
+          // Resume AudioContext kalau suspended
           if(window._keepAliveCtx && window._keepAliveCtx.state === 'suspended'){
-            window._keepAliveCtx.resume();
+            window._keepAliveCtx.resume().catch(function(){});
           }
           if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.getPlayerState === 'function'){
             var s = ytPlayer.getPlayerState();
@@ -715,7 +740,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
             window.flutter_inappwebview.callHandler('onMusicPause');
           },
           isAndroid: function(){ return true; },
-          // Download langsung ke storage — panggil handler downloadTrack
           openDownload: function(videoId, title){
             window.flutter_inappwebview.callHandler('downloadTrack', videoId, title || '');
           },
@@ -726,22 +750,50 @@ class _AuspotyWebViewState extends State<AuspotyWebView>
           }
         };
 
-        // AudioContext keep-alive
+        // AudioContext keep-alive — cegah audio stop saat background
         if(!window._auspotyKeepAlive){
           window._auspotyKeepAlive = true;
           try {
-            var ctx = new (window.AudioContext || window.webkitAudioContext)();
-            var osc = ctx.createOscillator();
-            var gain = ctx.createGain();
-            gain.gain.value = 0.00001;
-            osc.connect(gain);
-            gain.connect(ctx.destination);
-            osc.start();
+            var AudioCtx = window.AudioContext || window.webkitAudioContext;
+            var ctx = new AudioCtx();
             window._keepAliveCtx = ctx;
-          } catch(e) {}
+
+            function startOscillator() {
+              try {
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                gain.gain.value = 0.00001; // hampir tidak terdengar
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                window._keepAliveOsc = osc;
+              } catch(e) {}
+            }
+
+            if(ctx.state === 'running') {
+              startOscillator();
+            } else {
+              ctx.resume().then(startOscillator).catch(function(){});
+            }
+
+            // Resume saat visibilitychange (screen on/off)
+            document.addEventListener('visibilitychange', function() {
+              if(ctx.state === 'suspended') {
+                ctx.resume().catch(function(){});
+              }
+            });
+
+            // Resume periodik setiap 500ms kalau suspended
+            setInterval(function() {
+              if(ctx.state === 'suspended') {
+                ctx.resume().catch(function(){});
+              }
+            }, 500);
+
+          } catch(e) { console.warn('[Auspoty] AudioContext error:', e); }
         }
 
-        console.log('[Auspoty] Bridge v3.2 ready');
+        console.log('[Auspoty] Bridge v3.3 ready');
       })();
     ''');
   }
