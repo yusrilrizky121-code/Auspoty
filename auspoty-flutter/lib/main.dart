@@ -423,12 +423,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         window.AndroidBridge = {
           isAndroid: function(){ return true; },
           playNative: function(videoId, title, artist, img){
-            try { if(window.ytPlayer && window.ytPlayer.mute) window.ytPlayer.mute(); } catch(e){}
-            window._nativeLoading = true;
+            // Audio tetap di ytPlayer, native hanya untuk notifikasi
+            window._nativeLoading = false;
             window._nativePlaying = false;
             window._nativePaused = false;
             if(window.flutter_inappwebview){
-              window.flutter_inappwebview.callHandler('onMusicPlaying', title||'', artist||'', videoId||'');
+              window.flutter_inappwebview.callHandler('onMusicPlaying', title||'', artist||'', '', img||'');
             }
           },
           pauseNative: function(){

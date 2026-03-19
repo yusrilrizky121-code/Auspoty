@@ -168,6 +168,7 @@ class MusicPlayerService : Service() {
         currentTitle   = title.ifEmpty { "Auspoty" }
         currentArtist  = artist.ifEmpty { "Auspoty Music" }
         isPlaying      = playing
+        Log.d(TAG, "updateTrackInfo: title=$title, imgUrl=$imgUrl")
         if (playing) acquireWakeLock()
         // Reset art jika lagu baru
         if (imgUrl.isNotEmpty() && imgUrl != currentImgUrl) {
@@ -402,14 +403,30 @@ class MusicPlayerService : Service() {
     // ── Album Art ─────────────────────────────────────────────────────────────
 
     private fun fetchBitmap(url: String): android.graphics.Bitmap? {
+        Log.d(TAG, "fetchBitmap: trying URL=$url")
         return try {
-            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
-            conn.connectTimeout = 5000
-            conn.readTimeout = 5000
-            conn.doInput = true
-            conn.connect()
-            val input = conn.inputStream
-            android.graphics.BitmapFactory.decodeStream(input)
+            // Handle redirect manual
+            var finalUrl = url
+            repeat(3) { // max 3 redirects
+                val conn = java.net.URL(finalUrl).openConnection() as java.net.HttpURLConnection
+                conn.instanceFollowRedirects = false
+                conn.connectTimeout = 8000
+                conn.readTimeout = 8000
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0")
+                conn.connect()
+                val code = conn.responseCode
+                if (code in 300..399) {
+                    finalUrl = conn.getHeaderField("Location") ?: return null
+                    conn.disconnect()
+                    return@repeat
+                }
+                Log.d(TAG, "fetchBitmap: HTTP $code, url=$finalUrl")
+                if (code != 200) return null
+                val bmp = android.graphics.BitmapFactory.decodeStream(conn.inputStream)
+                Log.d(TAG, "fetchBitmap: bitmap=${bmp != null}, size=${bmp?.width}x${bmp?.height}")
+                return bmp
+            }
+            null
         } catch (e: Exception) {
             Log.e(TAG, "fetchBitmap failed: ${e.message}")
             null
