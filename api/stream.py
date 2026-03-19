@@ -5,7 +5,7 @@ def get_stream_url(video_id):
     import yt_dlp
 
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio[ext=mp4]/bestaudio/best',
         'quiet': True,
         'no_warnings': True,
         'extract_flat': False,
@@ -13,7 +13,8 @@ def get_stream_url(video_id):
         'noplaylist': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android_music', 'android', 'web'],
+                # android_music return URL yang bisa diakses tanpa header khusus
+                'player_client': ['android_music', 'android'],
             }
         },
     }
@@ -53,6 +54,9 @@ def get_stream_url(video_id):
     thumbs = info.get('thumbnails', [])
     thumbnail = thumbs[-1]['url'] if thumbs else ''
 
+    # Ambil http_headers dari format yang dipilih (untuk Android MediaPlayer)
+    http_headers = chosen.get('http_headers', {})
+
     return {
         'url': chosen['url'],
         'title': info.get('title', video_id),
@@ -61,6 +65,7 @@ def get_stream_url(video_id):
         'thumbnail': thumbnail,
         'mimeType': f"audio/{chosen.get('ext', 'mp4')}",
         'bitrate': int(chosen.get('abr', 0) or chosen.get('tbr', 0) or 0),
+        'headers': http_headers,
     }
 
 
