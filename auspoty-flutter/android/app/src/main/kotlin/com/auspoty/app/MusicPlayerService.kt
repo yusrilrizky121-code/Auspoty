@@ -67,6 +67,7 @@ class MusicPlayerService : Service() {
     private var currentVideoId = ""
     private var isPlaying     = false
     private var isNativePlaying = false  // true = MediaPlayer aktif
+    private var currentArt: android.graphics.Bitmap? = null
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context?, intent: Intent?) {
@@ -162,14 +163,25 @@ class MusicPlayerService : Service() {
         Log.d(TAG, "MediaPlayer stopped")
     }
 
-    fun updateTrackInfo(title: String, artist: String, playing: Boolean) {
+    fun updateTrackInfo(title: String, artist: String, playing: Boolean, imgUrl: String = "") {
         currentTitle  = title.ifEmpty { "Auspoty" }
         currentArtist = artist.ifEmpty { "Auspoty Music" }
         isPlaying     = playing
         if (playing) acquireWakeLock()
         updateMediaSessionMeta()
         updatePlaybackState()
-        refreshNotif()
+        if (imgUrl.isNotEmpty()) {
+            // Fetch album art di background, lalu update notif
+            Thread {
+                val bmp = fetchBitmap(imgUrl)
+                if (bmp != null) {
+                    currentArt = bmp
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { refreshNotif() }
+                }
+            }.start()
+        } else {
+            refreshNotif()
+        }
     }
 
     fun setPlaying(playing: Boolean) {
@@ -381,6 +393,23 @@ class MusicPlayerService : Service() {
         }
     }
 
+    // ── Album Art ─────────────────────────────────────────────────────────────
+
+    private fun fetchBitmap(url: String): android.graphics.Bitmap? {
+        return try {
+            val conn = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 5000
+            conn.readTimeout = 5000
+            conn.doInput = true
+            conn.connect()
+            val input = conn.inputStream
+            android.graphics.BitmapFactory.decodeStream(input)
+        } catch (e: Exception) {
+            Log.e(TAG, "fetchBitmap failed: ${e.message}")
+            null
+        }
+    }
+
     // ── Notification ─────────────────────────────────────────────────────────
 
     private fun refreshNotif() {
@@ -409,6 +438,7 @@ class MusicPlayerService : Service() {
             .setContentTitle(currentTitle)
             .setContentText(currentArtist)
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setLargeIcon(currentArt)
             .setContentIntent(openPi)
             .setOngoing(true)
             .setSilent(true)

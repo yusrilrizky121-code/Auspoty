@@ -164,7 +164,7 @@ function playMusic(videoId, encodedData) {
     if (window.flutter_inappwebview) {
         try {
             window.flutter_inappwebview.callHandler('onMusicPlaying',
-                currentTrack.title||'Auspoty', currentTrack.artist||'', '');
+                currentTrack.title||'Auspoty', currentTrack.artist||'', '', currentTrack.img||'');
         } catch(e) {}
     }
 

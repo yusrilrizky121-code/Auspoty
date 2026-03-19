@@ -46,7 +46,8 @@ class MainActivity : FlutterActivity() {
                     val title   = call.argument<String>("title")      ?: ""
                     val artist  = call.argument<String>("artist")     ?: ""
                     val playing = call.argument<Boolean>("isPlaying") ?: true
-                    service?.updateTrackInfo(title, artist, playing)
+                    val imgUrl  = call.argument<String>("imgUrl")     ?: ""
+                    service?.updateTrackInfo(title, artist, playing, imgUrl)
                     result.success(null)
                 }
                 "setPlaying" -> {
