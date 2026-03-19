@@ -432,6 +432,25 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
 
         window.AndroidBridge = {
           isAndroid: function(){ return true; },
+          playNative: function(videoId, title, artist, img){
+            try { if(window.ytPlayer && window.ytPlayer.mute) window.ytPlayer.mute(); } catch(e){}
+            window._nativeLoading = true;
+            window._nativePlaying = false;
+            window._nativePaused = false;
+            if(window.flutter_inappwebview){
+              window.flutter_inappwebview.callHandler('onMusicPlaying', title||'', artist||'', videoId||'');
+            }
+          },
+          pauseNative: function(){
+            window._nativePlaying = false;
+            window._nativePaused = true;
+            if(window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicPaused');
+          },
+          resumeNative: function(){
+            window._nativePlaying = true;
+            window._nativePaused = false;
+            if(window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicResumed');
+          },
           openDownload: function(vid, t){
             window.flutter_inappwebview.callHandler('downloadTrack', vid, t||'');
           },
@@ -440,6 +459,29 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             if(typeof updateProfileUI==='function') updateProfileUI();
             if(typeof updateGoogleLoginUI==='function') updateGoogleLoginUI();
           }
+        };
+
+        window._onNativePlaybackStarted = function(){
+          window._nativeLoading = false;
+          window._nativePlaying = true;
+          window._nativePaused = false;
+          isPlaying = true;
+          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
+        };
+        window._onNativePlaybackPaused = function(){
+          window._nativePlaying = false;
+          window._nativePaused = true;
+          isPlaying = false;
+          if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(false);
+        };
+        window._updateNativeProgress = function(pos, dur){
+          if(dur <= 0) return;
+          var pct = (pos/dur)*100;
+          var bar = document.getElementById('progressBar');
+          if(bar){ bar.value = pct; bar.style.background='linear-gradient(to right, white '+pct+'%, rgba(255,255,255,0.2) '+pct+'%)'; }
+          var fmt = function(s){ var m=Math.floor(s/60),sec=s%60; return m+':'+(sec<10?'0':'')+sec; };
+          var ct = document.getElementById('currentTime'); if(ct) ct.innerText = fmt(pos);
+          var tt = document.getElementById('totalTime'); if(tt) tt.innerText = fmt(dur);
         };
 
         // Format waktu helper
