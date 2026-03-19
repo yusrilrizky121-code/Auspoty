@@ -44,7 +44,6 @@ function onPlayerStateChange(event) {
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
         try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
-        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } } catch(e) {}
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
@@ -156,7 +155,15 @@ function playMusic(videoId, encodedData) {
     document.getElementById('totalTime').innerText = '0:00';
 
     // Putar via ytPlayer — background audio dijaga oleh foreground service
-    if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+    if (ytPlayer && ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById(videoId);
+        try {
+            if (window.flutter_inappwebview && currentTrack) {
+                window.flutter_inappwebview.callHandler('onMusicPlaying',
+                    currentTrack.title||'Auspoty', currentTrack.artist||'');
+            }
+        } catch(e) {}
+    }
 
     setTimeout(() => {
         if (currentTrack && _autoQueue.length < 2) prefetchNextSongs(currentTrack.artist, currentTrack.videoId);
@@ -166,7 +173,14 @@ function playMusic(videoId, encodedData) {
 // TOGGLE PLAY
 function togglePlay() {
     if (!ytPlayer) return;
-    if (isPlaying) { ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
+    if (isPlaying) {
+        ytPlayer.pauseVideo();
+        try { if (window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
+    } else {
+        ytPlayer.playVideo();
+        try { if (window.flutter_inappwebview && currentTrack) window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||''); } catch(e) {}
+    }
+} else { ytPlayer.playVideo(); }
 }
 
 function updatePlayPauseBtn(playing) {
