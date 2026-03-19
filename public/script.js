@@ -845,6 +845,8 @@ let _bgModeActive = false;
 let _bgKeepAliveInterval = null;
 
 function _applyVisibilityBlock() {
+    // Hanya override visibility — JANGAN panggil playVideo() langsung
+    // karena WebView blokir autoplay tanpa user gesture
     try {
         Object.defineProperty(document, 'hidden', {
             get: function(){ return false; }, configurable: true
@@ -852,14 +854,6 @@ function _applyVisibilityBlock() {
         Object.defineProperty(document, 'visibilityState', {
             get: function(){ return 'visible'; }, configurable: true
         });
-    } catch(e) {}
-    // Jika ytPlayer pause karena visibility, resume
-    try {
-        if (window.ytPlayer && typeof window.ytPlayer.getPlayerState === 'function') {
-            if (window.ytPlayer.getPlayerState() === 2 && isPlaying) {
-                window.ytPlayer.playVideo();
-            }
-        }
     } catch(e) {}
 }
 
