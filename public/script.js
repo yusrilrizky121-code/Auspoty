@@ -155,21 +155,17 @@ function playMusic(videoId, encodedData) {
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
 
-    // Putar audio
+    // Putar audio via ytPlayer (baik di web maupun APK)
+    if (ytPlayer && ytPlayer.loadVideoById) {
+        ytPlayer.loadVideoById(videoId);
+    }
+    _startBgKeepAlive();
+    // Kirim info ke native service untuk notifikasi saja (tidak intercept audio)
     if (window.flutter_inappwebview) {
-        // APK Flutter: kirim ke MediaPlayer native, ytPlayer di-mute agar tidak bentrok
-        try { if (ytPlayer && ytPlayer.mute) ytPlayer.mute(); } catch(e) {}
-        isPlaying = true;
-        updatePlayPauseBtn(true);
         try {
             window.flutter_inappwebview.callHandler('onMusicPlaying',
-                currentTrack.title||'Auspoty', currentTrack.artist||'', videoId||'');
+                currentTrack.title||'Auspoty', currentTrack.artist||'', '');
         } catch(e) {}
-        _startBgKeepAlive();
-    } else if (ytPlayer && ytPlayer.loadVideoById) {
-        // Web/PWA: pakai ytPlayer biasa
-        ytPlayer.loadVideoById(videoId);
-        _startBgKeepAlive();
     }
 
     setTimeout(() => {
@@ -179,25 +175,13 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
-    if (window.flutter_inappwebview) {
-        // APK mode: toggle via native
-        if (isPlaying) {
-            isPlaying = false;
-            updatePlayPauseBtn(false);
-            try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
-        } else {
-            isPlaying = true;
-            updatePlayPauseBtn(true);
-            try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
-        }
-        return;
-    }
-    // Web/PWA mode
     if (!ytPlayer) return;
     if (isPlaying) {
         ytPlayer.pauseVideo();
+        if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
     } else {
         ytPlayer.playVideo();
+        if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
     }
 }
 
