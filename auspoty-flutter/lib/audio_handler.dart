@@ -21,13 +21,11 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
       ),
     );
 
-    // Forward playback events ke audio_service (ini yang bikin notifikasi update)
-    audioPlayer.playbackEventStream.listen((_) => _updatePlaybackState());
+    audioPlayer.playbackEventStream.listen((_) => _updatePlaybackState(),
+        onError: (e) {});
 
     audioPlayer.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
-        onSkipToNext?.call();
-      }
+      if (state == ProcessingState.completed) onSkipToNext?.call();
       _updatePlaybackState();
     });
 
@@ -42,34 +40,47 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
   }
 
   Future<void> _initAudioSession() async {
-    // Cara Musify: configure AudioSession untuk music
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
-    await audioPlayer.setLoopMode(LoopMode.off);
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      await audioPlayer.setLoopMode(LoopMode.off);
+    } catch (_) {}
   }
 
-  /// Putar dari URL langsung
-  Future<void> playFromUrl(String url, MediaItem item) async {
-    mediaItem.add(item);
-    _emitLoadingState();
+  // Headers yang dibutuhkan YouTube — sama persis dengan yang API return
+  static const _ytHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'Accept-Language': 'en-us,en;q=0.5',
+    'Sec-Fetch-Mode': 'navigate',
+  };
+
+  Future<void> playFromUrl(String url, MediaItem item, {Map<String, String>? headers}) async {
     try {
+      mediaItem.add(item);
+      _emitLoadingState();
+
+      // Stop dulu kalau sedang play
+      if (audioPlayer.playing) await audioPlayer.stop();
+
+      final effectiveHeaders = headers ?? _ytHeaders;
+
       await audioPlayer.setAudioSource(
         AudioSource.uri(
           Uri.parse(url),
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
-            'Referer': 'https://www.youtube.com/',
-          },
+          headers: effectiveHeaders,
           tag: item,
         ),
       );
       await audioPlayer.play();
-      // Update mediaItem dengan durasi setelah loaded
-      final dur = audioPlayer.duration;
-      if (dur != null) {
-        mediaItem.add(item.copyWith(duration: dur));
-      }
-    } catch (_) {}
+
+      // Update durasi setelah loaded
+      audioPlayer.durationStream.firstWhere((d) => d != null).then((dur) {
+        if (dur != null) mediaItem.add(item.copyWith(duration: dur));
+      }).catchError((_) {});
+    } catch (e) {
+      // ignore
+    }
   }
 
   void _emitLoadingState() {
@@ -109,26 +120,12 @@ class AuspotyAudioHandler extends BaseAudioHandler with SeekHandler {
     ));
   }
 
-  @override
-  Future<void> play() => audioPlayer.play();
-
-  @override
-  Future<void> pause() => audioPlayer.pause();
-
-  @override
-  Future<void> stop() async {
-    await audioPlayer.stop();
-    await super.stop();
-  }
-
-  @override
-  Future<void> seek(Duration position) => audioPlayer.seek(position);
-
-  @override
-  Future<void> skipToNext() async => onSkipToNext?.call();
-
-  @override
-  Future<void> skipToPrevious() async => onSkipToPrevious?.call();
+  @override Future<void> play() => audioPlayer.play();
+  @override Future<void> pause() => audioPlayer.pause();
+  @override Future<void> stop() async { await audioPlayer.stop(); await super.stop(); }
+  @override Future<void> seek(Duration position) => audioPlayer.seek(position);
+  @override Future<void> skipToNext() async => onSkipToNext?.call();
+  @override Future<void> skipToPrevious() async => onSkipToPrevious?.call();
 
   int get durationSeconds => audioPlayer.duration?.inSeconds ?? 0;
   Stream<Duration> get positionStream => audioPlayer.positionStream;

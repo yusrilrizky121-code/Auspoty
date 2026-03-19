@@ -184,14 +184,34 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     try {
       final resp = await http.get(
         Uri.parse('$_base/api/stream?videoId=$videoId'),
-        headers: {'User-Agent': 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36'},
+        headers: {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'},
       ).timeout(const Duration(seconds: 25));
 
       if (resp.statusCode != 200) return;
 
-      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(resp.body);
+      // Parse JSON response
+      final body = resp.body;
+      final urlMatch = RegExp(r'"url"\s*:\s*"([^"]+)"').firstMatch(body);
       if (urlMatch == null) return;
       final streamUrl = urlMatch.group(1)!.replaceAll(r'\/', '/');
+
+      // Ambil headers dari API response
+      final Map<String, String> streamHeaders = {};
+      final headersMatch = RegExp(r'"headers"\s*:\s*\{([^}]+)\}').firstMatch(body);
+      if (headersMatch != null) {
+        final hBody = headersMatch.group(1)!;
+        final pairs = RegExp(r'"([^"]+)"\s*:\s*"([^"]+)"').allMatches(hBody);
+        for (final m in pairs) {
+          streamHeaders[m.group(1)!] = m.group(2)!;
+        }
+      }
+      // Fallback headers kalau kosong
+      if (streamHeaders.isEmpty) {
+        streamHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36';
+        streamHeaders['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+        streamHeaders['Accept-Language'] = 'en-us,en;q=0.5';
+        streamHeaders['Sec-Fetch-Mode'] = 'navigate';
+      }
 
       final item = MediaItem(
         id: videoId,
@@ -199,7 +219,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         artist: artist.isEmpty ? 'Auspoty Music' : artist,
       );
 
-      await _audioHandler.playFromUrl(streamUrl, item);
+      await _audioHandler.playFromUrl(streamUrl, item, headers: streamHeaders);
 
       // Beritahu JS playback sudah mulai
       _wvc?.evaluateJavascript(source: """
