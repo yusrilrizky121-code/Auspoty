@@ -43,14 +43,14 @@ function onPlayerStateChange(event) {
         if (miniBtn) miniBtn.innerHTML = '<path d="' + pausePath + '"/>';
         startProgressBar();
         if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
-        try { if (window.flutter_inappwebview && currentTrack) { window.flutter_inappwebview.callHandler('onMusicPlaying', currentTrack.title||'Auspoty', currentTrack.artist||'', currentTrack.videoId||''); } } catch(e) {}
-        _startBgKeepAlive();
+        // APK mode: onMusicPlaying sudah dipanggil dari playMusic(), tidak perlu di sini
+        if (!window.flutter_inappwebview) _startBgKeepAlive();
     } else if (event.data == YT.PlayerState.PAUSED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
         if (miniBtn) miniBtn.innerHTML = '<path d="' + playPath + '"/>';
         stopProgressBar();
-        try { if (window.flutter_inappwebview) { window.flutter_inappwebview.callHandler('onMusicPaused'); } } catch(e) {}
+        // APK mode: pause dihandle via AndroidBridge.pauseNative()
     } else if (event.data == YT.PlayerState.ENDED) {
         isPlaying = false;
         if (mainBtn) mainBtn.innerHTML = '<path d="' + playPath + '"/>';
@@ -155,16 +155,21 @@ function playMusic(videoId, encodedData) {
     document.getElementById('currentTime').innerText = '0:00';
     document.getElementById('totalTime').innerText = '0:00';
 
-    // Putar via ytPlayer — background audio dijaga oleh foreground service
-    if (ytPlayer && ytPlayer.loadVideoById) {
+    // Putar audio
+    if (window.flutter_inappwebview) {
+        // APK Flutter: kirim ke MediaPlayer native, ytPlayer di-mute agar tidak bentrok
+        try { if (ytPlayer && ytPlayer.mute) ytPlayer.mute(); } catch(e) {}
+        isPlaying = true;
+        updatePlayPauseBtn(true);
+        try {
+            window.flutter_inappwebview.callHandler('onMusicPlaying',
+                currentTrack.title||'Auspoty', currentTrack.artist||'', videoId||'');
+        } catch(e) {}
+        _startBgKeepAlive();
+    } else if (ytPlayer && ytPlayer.loadVideoById) {
+        // Web/PWA: pakai ytPlayer biasa
         ytPlayer.loadVideoById(videoId);
         _startBgKeepAlive();
-        try {
-            if (window.flutter_inappwebview && currentTrack) {
-                window.flutter_inappwebview.callHandler('onMusicPlaying',
-                    currentTrack.title||'Auspoty', currentTrack.artist||'', videoId||'');
-            }
-        } catch(e) {}
     }
 
     setTimeout(() => {
@@ -174,13 +179,25 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
+    if (window.flutter_inappwebview) {
+        // APK mode: toggle via native
+        if (isPlaying) {
+            isPlaying = false;
+            updatePlayPauseBtn(false);
+            try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
+        } else {
+            isPlaying = true;
+            updatePlayPauseBtn(true);
+            try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
+        }
+        return;
+    }
+    // Web/PWA mode
     if (!ytPlayer) return;
     if (isPlaying) {
         ytPlayer.pauseVideo();
-        try { if (window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
     } else {
         ytPlayer.playVideo();
-        try { if (window.flutter_inappwebview) window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
     }
 }
 
