@@ -1004,30 +1004,10 @@ function _updateWaveform(pct) {
 document.addEventListener('DOMContentLoaded', function() {
     applyAllSettings(); updateProfileUI(); loadHomeData(); renderSearchCategories();
 
-    // Hide Vercel toolbar (the floating circle button)
-    function _hideVercelToolbar() {
-        var selectors = ['vercel-live-feedback','#__vercel-toolbar','.__vercel-toolbar','vercel-toolbar','[data-vercel-toolbar]'];
-        selectors.forEach(function(s) {
-            try {
-                var el = document.querySelector(s);
-                if (el) el.style.cssText = 'display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;';
-            } catch(e) {}
-        });
-        // Also check shadow DOM
-        document.querySelectorAll('*').forEach(function(el) {
-            if (el.tagName && el.tagName.toLowerCase().includes('vercel')) {
-                el.style.cssText = 'display:none!important;';
-            }
-        });
-    }
-    _hideVercelToolbar();
-    // Keep checking for 5 seconds in case it loads late
-    var _vt = 0;
-    var _vtInterval = setInterval(function() {
-        _hideVercelToolbar();
-        _vt++;
-        if (_vt > 10) clearInterval(_vtInterval);
-    }, 500);
+    // Hide Vercel toolbar via CSS injection (lightweight, no DOM loop)
+    var _vtStyle = document.createElement('style');
+    _vtStyle.textContent = 'vercel-live-feedback,vercel-toolbar,[data-vercel-toolbar],#__vercel-toolbar{display:none!important;}';
+    document.head.appendChild(_vtStyle);
 });
 
 
