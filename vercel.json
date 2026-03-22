@@ -1,8 +1,8 @@
 {
   "version": 2,
   "functions": {
-    "api/search.py": { "maxDuration": 30 },
-    "api/lyrics.py": { "maxDuration": 30 },
+    "api/search.py": { "maxDuration": 30, "includeFiles": "api/ytmusicapi/**" },
+    "api/lyrics.py": { "maxDuration": 30, "includeFiles": "api/ytmusicapi/**" },
     "api/download.py": { "maxDuration": 60 },
     "api/stream.py": { "maxDuration": 60 }
   },
