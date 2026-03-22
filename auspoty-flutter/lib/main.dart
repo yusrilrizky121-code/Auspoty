@@ -211,7 +211,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         backgroundColor: const Color(0xFF0a0a0f),
         resizeToAvoidBottomInset: false,
         body: SafeArea(
-          top: true, bottom: true,
+          top: true, bottom: false,
           child: Stack(children: [
             InAppWebView(
               keepAlive: _keepAlive,
@@ -228,8 +228,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 allowFileAccessFromFileURLs: false,
                 allowUniversalAccessFromFileURLs: false,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
-                useWideViewPort: true,
-                loadWithOverviewMode: true,
+                useWideViewPort: false,
+                loadWithOverviewMode: false,
                 supportZoom: false,
                 builtInZoomControls: false,
                 displayZoomControls: false,
