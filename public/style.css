@@ -181,18 +181,18 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
 /* Waveform seekbar — Namida style */
 .progress-container { padding:0 28px; margin-bottom:8px; }
 .waveform-container {
-    position:relative; height:48px; cursor:pointer;
+    position:relative; height:56px; cursor:pointer;
     display:flex; align-items:center; gap:2px;
     overflow:hidden;
 }
 .waveform-bar {
     flex:1; border-radius:3px;
-    background:rgba(255,255,255,0.18);
+    background:rgba(255,255,255,0.45);
     transition:height .15s ease, background .2s ease;
-    min-height:3px;
+    min-height:4px;
 }
-.waveform-bar.played { background:linear-gradient(to top, var(--accent), var(--accent2)); }
-.waveform-bar.active { background:white; }
+.waveform-bar.played { background:linear-gradient(to top, var(--accent), var(--accent2)); opacity:1; }
+.waveform-bar.active { background:white; box-shadow:0 0 6px rgba(255,255,255,0.8); }
 /* Hidden range input for seek */
 .progress-bar {
     position:absolute; inset:0; opacity:0; cursor:pointer;
