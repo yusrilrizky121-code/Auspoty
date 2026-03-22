@@ -455,9 +455,6 @@ body.font-small  .v-title { font-size: 12px !important; } body.font-small  .h-ti
 body.font-large  .v-title { font-size: 17px !important; } body.font-large  .h-title { font-size: 15px !important; } body.font-large  .section-title { font-size: 23px !important; } body.font-large  .mini-player-title { font-size: 15px !important; } body.font-large  .player-title { font-size: 26px !important; }
 body.font-xlarge .v-title { font-size: 20px !important; } body.font-xlarge .h-title { font-size: 17px !important; } body.font-xlarge .section-title { font-size: 26px !important; } body.font-xlarge .mini-player-title { font-size: 17px !important; } body.font-xlarge .player-title { font-size: 30px !important; }
 
-/* hide vercel toolbar */
-vercel-live-feedback,vercel-toolbar,#__vercel-toolbar,[data-vercel-toolbar]{display:none!important;}
-
 
 
 /* ===== DOWNLOAD BTNS ===== */

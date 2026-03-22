@@ -542,6 +542,7 @@ async function loadHomeData() {
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
     applyLanguageTitles();
+    // Lazy load: 2 rows at a time to avoid hammering API and blocking main thread
     const rows = getHomeQueries();
     async function loadRow(row) {
         const el = document.getElementById(row.id); if (!el) return;
@@ -553,6 +554,7 @@ async function loadHomeData() {
             else el.innerHTML = '';
         } catch(e) { el.innerHTML = ''; }
     }
+    // Load first 2 rows immediately, rest after 800ms delay
     for (let i = 0; i < rows.length; i++) {
         if (i < 2) { loadRow(rows[i]); }
         else { setTimeout(() => loadRow(rows[i]), 1200 + (i - 2) * 600); }

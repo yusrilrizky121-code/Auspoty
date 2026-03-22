@@ -32,10 +32,6 @@ android {
         versionCode 10
         versionName "6.2.0"
         multiDexEnabled true
-        // Only build for modern 64-bit ARM devices (covers 95%+ of Android phones)
-        ndk {
-            abiFilters "arm64-v8a"
-        }
     }
 
     signingConfigs {
@@ -57,16 +53,6 @@ android {
         debug {
             minifyEnabled false
             shrinkResources false
-        }
-    }
-
-    // Split APK per ABI — arm64 only = smallest possible
-    splits {
-        abi {
-            enable true
-            reset()
-            include "arm64-v8a"
-            universalApk false
         }
     }
 }
