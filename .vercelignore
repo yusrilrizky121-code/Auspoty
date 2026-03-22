@@ -16,20 +16,26 @@ assets/
 # APK files
 *.apk
 
-# Python patch/fix scripts
-*.py
-!api/search.py
-!api/lyrics.py
-!api/download.py
-!api/stream.py
+# Python patch/fix scripts di root (bukan di api/)
+_*.py
+patch_*.py
+fix_*.py
+test_*.py
+check_*.py
+read_*.py
+write_*.py
+gen_*.py
+sync_all.py
+add_download.py
+build.py
+do_fix.py
+verify_fixes.py
+restore_and_fix.py
 
-# Misc
+# Misc files
 *.txt
-*.md
-*.css.bak
-*.js.bak
+*.bak
 script_good.js
 style_backup.css
-_main_dart_backup.txt
 .idea/
 .vscode/
