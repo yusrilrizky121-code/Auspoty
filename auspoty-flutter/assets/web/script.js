@@ -212,38 +212,55 @@ function minimizePlayer() { document.getElementById('playerModal').style.display
 
 function startProgressBar() {
     stopProgressBar();
-    // Cache DOM refs once — avoid repeated getElementById in hot loop
-    var _bar = document.getElementById('progressBar');
+    // Cache DOM refs once — zero getElementById in hot loop
+    var _bar  = document.getElementById('progressBar');
     var _fill = document.getElementById('progressFill');
-    var _mf = document.getElementById('miniProgressFill');
-    var _ct = document.getElementById('currentTime');
-    var _tt = document.getElementById('totalTime');
+    var _mf   = document.getElementById('miniProgressFill');
+    var _ct   = document.getElementById('currentTime');
+    var _tt   = document.getElementById('totalTime');
     var _modal = document.getElementById('playerModal');
-    var _mini = document.getElementById('miniPlayer');
+    var _mini  = document.getElementById('miniPlayer');
     var _lastPct = -1;
-    progressInterval = setInterval(function() {
+    var _raf = null;
+    var _lastTick = 0;
+
+    function _tick(now) {
+        _raf = requestAnimationFrame(_tick);
+        // throttle to ~1fps — enough for progress bar
+        if (now - _lastTick < 950) return;
+        _lastTick = now;
         if (!ytPlayer || !ytPlayer.getCurrentTime) return;
         if (_isScrolling) return;
         var modalVis = _modal && _modal.style.display === 'flex';
-        var miniVis = _mini && _mini.style.display === 'flex';
+        var miniVis  = _mini  && _mini.style.display  === 'flex';
         if (!modalVis && !miniVis) return;
         var cur = ytPlayer.getCurrentTime();
         var dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
         if (dur <= 0) return;
         var pct = (cur / dur) * 100;
-        if (Math.abs(pct - _lastPct) < 0.3) return;
+        if (Math.abs(pct - _lastPct) < 0.25) return;
         _lastPct = pct;
         var pctStr = pct.toFixed(1) + '%';
-        if (_bar) _bar.value = pct;
+        if (_bar)  _bar.value = pct;
         if (_fill) _fill.style.width = pctStr;
-        if (_mf) _mf.style.width = pctStr;
+        if (_mf)   _mf.style.width   = pctStr;
         if (modalVis) {
             if (_ct) _ct.innerText = formatTime(cur);
             if (_tt) _tt.innerText = formatTime(dur);
         }
-    }, 1000);
+    }
+    _raf = requestAnimationFrame(_tick);
+    // store cancel handle on progressInterval for stopProgressBar
+    progressInterval = { _raf: _raf, _tickRef: _tick };
 }
-function stopProgressBar() { clearInterval(progressInterval); }
+function stopProgressBar() {
+    if (progressInterval && progressInterval._raf) {
+        cancelAnimationFrame(progressInterval._raf);
+    } else {
+        clearInterval(progressInterval);
+    }
+    progressInterval = null;
+}
 function seekTo(value) {
     if (!ytPlayer) return;
     const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
@@ -302,8 +319,11 @@ async function openLyricsModal() {
 }
 function startLyricsScroll() {
     stopLyricsScroll();
-    lyricsScrollInterval = setInterval(function() { // 500ms
-        if (_isScrolling) return; // pause during scroll
+    // Cache body ref once
+    var _lb = document.getElementById('lyricsBody');
+    var _lastIdx = -1;
+    lyricsScrollInterval = setInterval(function() {
+        if (_isScrolling) return;
         var cur = 0, dur = 0;
         if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
@@ -318,21 +338,30 @@ function startLyricsScroll() {
         } else {
             idx = Math.min(Math.floor((cur / dur) * lyricsLines.length), lyricsLines.length - 1);
         }
-        if (idx === currentHighlightIdx) return;
-        currentHighlightIdx = idx;
-        lyricsLines.forEach(function(_, i) {
-            var el = document.getElementById('lyric-line-' + i);
-            if (el) el.className = 'lyric-line' + (i === idx ? ' lyric-active' : (i < idx ? ' lyric-past' : ''));
-        });
-        var activeLine = document.getElementById('lyric-line-' + idx);
-        if (activeLine) {
-            var lb = document.getElementById('lyricsBody');
-            if (lb) {
-                var target = activeLine.offsetTop - (lb.clientHeight / 2) + (activeLine.offsetHeight / 2);
-                // Smooth scroll without triggering layout thrash
-                requestAnimationFrame(function() { lb.scrollTop = target; });
+        if (idx === _lastIdx) return;
+        // Batch: remove old, add new — avoid full loop when possible
+        if (_lastIdx >= 0) {
+            var old = document.getElementById('lyric-line-' + _lastIdx);
+            if (old) old.className = 'lyric-line lyric-past';
+        }
+        var active = document.getElementById('lyric-line-' + idx);
+        if (active) {
+            active.className = 'lyric-line lyric-active';
+            // Mark previous lines past only when idx jumps
+            if (idx > _lastIdx + 1) {
+                for (var j = _lastIdx + 1; j < idx; j++) {
+                    var el = document.getElementById('lyric-line-' + j);
+                    if (el) el.className = 'lyric-line lyric-past';
+                }
+            }
+            // Instant scroll — no smooth scroll jank on low-end
+            if (_lb) {
+                var target = active.offsetTop - (_lb.clientHeight / 2) + (active.offsetHeight / 2);
+                requestAnimationFrame(function() { _lb.scrollTop = target; });
             }
         }
+        _lastIdx = idx;
+        currentHighlightIdx = idx;
     }, 500);
 }
 function stopLyricsScroll() { clearInterval(lyricsScrollInterval); lyricsScrollInterval = null; }

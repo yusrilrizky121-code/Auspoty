@@ -1,4 +1,4 @@
-# Flutter
+# Flutter core
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
 -dontwarn io.flutter.**
@@ -7,13 +7,10 @@
 -keep class com.pichillilorenzo.flutter_inappwebview.** { *; }
 -dontwarn com.pichillilorenzo.**
 
-# Local Notifications
--keep class com.dexterous.** { *; }
-
 # Wakelock
 -keep class xyz.luan.** { *; }
 
-# Keep app classes
+# App classes
 -keep class com.auspoty.app.** { *; }
 
 # WebView JS interface
@@ -21,10 +18,23 @@
     @android.webkit.JavascriptInterface <methods>;
 }
 
-# Kotlin
--keep class kotlin.** { *; }
+# Kotlin minimal
+-keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
 
-# AndroidX
--keep class androidx.** { *; }
+# AndroidX minimal
+-keep class androidx.core.** { *; }
+-keep class androidx.media.** { *; }
 -dontwarn androidx.**
+
+# Remove logging in release
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+}
+
+# Aggressive shrink
+-optimizationpasses 5
+-allowaccessmodification
+-dontpreverify
