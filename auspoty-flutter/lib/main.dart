@@ -419,16 +419,20 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         s.textContent=`
           .bottom-nav{position:fixed!important;bottom:0!important;left:0!important;right:0!important;
             height:60px!important;display:flex!important;justify-content:space-around!important;
-            align-items:center!important;padding:0!important;background:rgba(10,10,15,0.95)!important;
-            backdrop-filter:blur(30px)!important;border-top:1px solid rgba(255,255,255,0.1)!important;z-index:1000!important;}
+            align-items:center!important;padding:0!important;background:#0a0a0f!important;
+            border-top:1px solid rgba(255,255,255,0.1)!important;z-index:1000!important;
+            transform:translateZ(0)!important;}
           .nav-item{display:flex!important;flex-direction:column!important;align-items:center!important;
             justify-content:center!important;gap:3px!important;font-size:10px!important;
             min-width:60px!important;height:60px!important;cursor:pointer!important;color:rgba(255,255,255,0.5)!important;}
           .nav-item.active{color:#a78bfa!important;}
           .nav-item svg{width:22px!important;height:22px!important;fill:currentColor!important;}
           body{padding-bottom:160px!important;}
-          .mini-player{bottom:68px!important;}
+          .mini-player{bottom:68px!important;will-change:transform!important;}
           .toast-notification.show{bottom:80px!important;}
+          *{-webkit-tap-highlight-color:transparent!important;}
+          .horizontal-scroll{will-change:auto!important;}
+          img{content-visibility:auto!important;}
         `;
         document.head.appendChild(s);
       })();

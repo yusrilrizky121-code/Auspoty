@@ -319,10 +319,16 @@ async function openLyricsModal() {
 }
 function startLyricsScroll() {
     stopLyricsScroll();
-    // Cache body ref once
     var _lb = document.getElementById('lyricsBody');
     var _lastIdx = -1;
-    lyricsScrollInterval = setInterval(function() {
+    var _lastTick = 0;
+    var _rafId = null;
+
+    function _tick(now) {
+        _rafId = requestAnimationFrame(_tick);
+        // throttle to ~2fps — enough for lyrics sync
+        if (now - _lastTick < 480) return;
+        _lastTick = now;
         if (_isScrolling) return;
         var cur = 0, dur = 0;
         if (ytPlayer && ytPlayer.getCurrentTime) {
@@ -339,7 +345,6 @@ function startLyricsScroll() {
             idx = Math.min(Math.floor((cur / dur) * lyricsLines.length), lyricsLines.length - 1);
         }
         if (idx === _lastIdx) return;
-        // Batch: remove old, add new — avoid full loop when possible
         if (_lastIdx >= 0) {
             var old = document.getElementById('lyric-line-' + _lastIdx);
             if (old) old.className = 'lyric-line lyric-past';
@@ -347,24 +352,31 @@ function startLyricsScroll() {
         var active = document.getElementById('lyric-line-' + idx);
         if (active) {
             active.className = 'lyric-line lyric-active';
-            // Mark previous lines past only when idx jumps
             if (idx > _lastIdx + 1) {
                 for (var j = _lastIdx + 1; j < idx; j++) {
                     var el = document.getElementById('lyric-line-' + j);
                     if (el) el.className = 'lyric-line lyric-past';
                 }
             }
-            // Instant scroll — no smooth scroll jank on low-end
             if (_lb) {
                 var target = active.offsetTop - (_lb.clientHeight / 2) + (active.offsetHeight / 2);
-                requestAnimationFrame(function() { _lb.scrollTop = target; });
+                _lb.scrollTop = target;
             }
         }
         _lastIdx = idx;
         currentHighlightIdx = idx;
-    }, 500);
+    }
+    _rafId = requestAnimationFrame(_tick);
+    lyricsScrollInterval = { _rafId: _rafId, _tickRef: _tick };
 }
-function stopLyricsScroll() { clearInterval(lyricsScrollInterval); lyricsScrollInterval = null; }
+function stopLyricsScroll() {
+    if (lyricsScrollInterval && lyricsScrollInterval._rafId) {
+        cancelAnimationFrame(lyricsScrollInterval._rafId);
+    } else {
+        clearInterval(lyricsScrollInterval);
+    }
+    lyricsScrollInterval = null;
+}
 function closeLyricsToPlayer() { stopLyricsScroll(); document.getElementById('lyricsModal').style.display = 'none'; document.getElementById('playerModal').style.display = 'flex'; }
 function closeLyrics() { stopLyricsScroll(); document.getElementById('lyricsModal').style.display = 'none'; }
 
