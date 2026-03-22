@@ -1,10 +1,7 @@
-import sys
-import os
-sys.path.insert(0, os.path.dirname(__file__))
-
 import json
+import requests
 from http.server import BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -22,18 +19,72 @@ class handler(BaseHTTPRequestHandler):
             return
 
         try:
-            from ytmusicapi import YTMusic
-            yt = YTMusic()
-            results = yt.search(query, filter="songs", limit=12)
+            # Use YouTube Music internal API (no key needed)
+            url = "https://music.youtube.com/youtubei/v1/search?prettyPrint=false"
+            payload = {
+                "query": query,
+                "params": "EgWKAQIIAWoKEAoQAxAEEAkQBQ%3D%3D",
+                "context": {
+                    "client": {
+                        "clientName": "WEB_REMIX",
+                        "clientVersion": "1.20240101.01.00",
+                        "hl": "id",
+                        "gl": "ID"
+                    }
+                }
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0",
+                "X-Goog-Api-Format-Version": "1",
+                "Origin": "https://music.youtube.com",
+                "Referer": "https://music.youtube.com/"
+            }
+            r = requests.post(url, json=payload, headers=headers, timeout=10)
+            raw = r.json()
+
             data = []
-            for item in results:
-                if 'videoId' in item:
-                    data.append({
-                        "videoId": item['videoId'],
-                        "title": item.get('title', 'Unknown'),
-                        "artist": item.get('artists', [{'name': 'Unknown'}])[0]['name'] if item.get('artists') else 'Unknown',
-                        "thumbnail": item['thumbnails'][-1]['url'] if item.get('thumbnails') else ''
-                    })
-            self.wfile.write(json.dumps({"status": "success", "data": data}).encode())
+            # Parse results from YouTube Music response
+            try:
+                tabs = raw.get("contents", {}).get("tabbedSearchResultsRenderer", {}).get("tabs", [])
+                for tab in tabs:
+                    section_list = tab.get("tabRenderer", {}).get("content", {}).get("sectionListRenderer", {}).get("contents", [])
+                    for section in section_list:
+                        items = section.get("musicShelfRenderer", {}).get("contents", [])
+                        for item in items:
+                            r2 = item.get("musicResponsiveListItemRenderer", {})
+                            # Get videoId
+                            overlay = r2.get("overlay", {}).get("musicItemThumbnailOverlayRenderer", {})
+                            nav = overlay.get("content", {}).get("musicPlayButtonRenderer", {}).get("playNavigationEndpoint", {})
+                            vid = nav.get("watchEndpoint", {}).get("videoId", "")
+                            if not vid:
+                                continue
+                            # Get title
+                            flex = r2.get("flexColumns", [])
+                            title = ""
+                            artist = ""
+                            if flex:
+                                runs = flex[0].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                                title = runs[0].get("text", "") if runs else ""
+                            if len(flex) > 1:
+                                runs2 = flex[1].get("musicResponsiveListItemFlexColumnRenderer", {}).get("text", {}).get("runs", [])
+                                artist = runs2[0].get("text", "") if runs2 else ""
+                            # Get thumbnail
+                            thumbs = r2.get("thumbnail", {}).get("musicThumbnailRenderer", {}).get("thumbnail", {}).get("thumbnails", [])
+                            thumb = thumbs[-1].get("url", "") if thumbs else ""
+                            data.append({"videoId": vid, "title": title, "artist": artist, "thumbnail": thumb})
+                            if len(data) >= 12:
+                                break
+                        if len(data) >= 12:
+                            break
+                    if len(data) >= 12:
+                        break
+            except Exception:
+                pass
+
+            if data:
+                self.wfile.write(json.dumps({"status": "success", "data": data}).encode())
+            else:
+                self.wfile.write(json.dumps({"status": "error", "message": "no results", "data": []}).encode())
         except Exception as e:
             self.wfile.write(json.dumps({"status": "error", "message": str(e), "data": []}).encode())
