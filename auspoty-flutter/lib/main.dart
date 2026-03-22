@@ -233,6 +233,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 builtInZoomControls: false,
                 displayZoomControls: false,
                 cacheMode: CacheMode.LOAD_CACHE_ELSE_NETWORK,
+                geolocationEnabled: false,
+                safeBrowsingEnabled: false,
+                disableDefaultErrorPage: true,
+                verticalScrollBarEnabled: false,
+                horizontalScrollBarEnabled: false,
+                overScrollMode: OverScrollMode.NEVER,
                 userAgent: 'Mozilla/5.0 (Linux; Android 12; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
               ),
               onWebViewCreated: (c) {

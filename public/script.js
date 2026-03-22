@@ -294,6 +294,7 @@ async function openLyricsModal() {
 function startLyricsScroll() {
     stopLyricsScroll();
     lyricsScrollInterval = setInterval(function() { // 500ms
+        if (_isScrolling) return; // pause during scroll
         var cur = 0, dur = 0;
         if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
@@ -317,7 +318,11 @@ function startLyricsScroll() {
         var activeLine = document.getElementById('lyric-line-' + idx);
         if (activeLine) {
             var lb = document.getElementById('lyricsBody');
-            if (lb) lb.scrollTop = activeLine.offsetTop - (lb.clientHeight / 2) + (activeLine.offsetHeight / 2);
+            if (lb) {
+                var target = activeLine.offsetTop - (lb.clientHeight / 2) + (activeLine.offsetHeight / 2);
+                // Smooth scroll without triggering layout thrash
+                requestAnimationFrame(function() { lb.scrollTop = target; });
+            }
         }
     }, 500);
 }
@@ -505,6 +510,20 @@ function searchByCategory(encodedQuery) {
     document.getElementById('searchInput').value = q;
     doSearch(q);
 }
+
+// ============================================================
+// SCROLL PERFORMANCE — pause JS work during scroll
+// ============================================================
+var _isScrolling = false;
+var _scrollTimer = null;
+function _onScrollStart() {
+    _isScrolling = true;
+    clearTimeout(_scrollTimer);
+    _scrollTimer = setTimeout(function() { _isScrolling = false; }, 150);
+}
+document.addEventListener('scroll', _onScrollStart, { passive: true });
+document.addEventListener('touchmove', _onScrollStart, { passive: true });
+
 document.addEventListener('DOMContentLoaded', function() {
     const inp = document.getElementById('searchInput');
     if (inp) {
