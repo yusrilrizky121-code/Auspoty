@@ -50,7 +50,7 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
  to{opacity:1;transform:translateY(0)} }
 
 /* HOME HEADER */
-.home-header { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); -webkit- border-bottom:1px solid var(--glass-border); }
+.home-header { padding:16px 20px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); border-bottom:1px solid var(--glass-border); }
 .home-header-left { display:flex; align-items:center; gap:12px; }
 .app-avatar { width:34px; height:34px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:800; color:#fff; flex-shrink:0; overflow:hidden; box-shadow:0 0 12px rgba(167,139,250,0.4); }
 .home-pills { display:flex; gap:8px; }
@@ -95,7 +95,7 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
 .category-title { font-size:15px; font-weight:700; color:white; position:relative; z-index:2; }
 
 /* LIBRARY */
-.lib-header { padding:44px 20px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); -webkit- border-bottom:1px solid var(--glass-border); }
+.lib-header { padding:44px 20px 16px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); border-bottom:1px solid var(--glass-border); }
 .lib-header-left { display:flex; align-items:center; gap:16px; }
 .lib-title { font-size:24px; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
 .lib-actions svg { width:24px; height:24px; fill:var(--accent); cursor:pointer; }
@@ -115,18 +115,18 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
 .playlist-hero-header { padding:20px 20px 0; background:linear-gradient(to bottom,rgba(124,58,237,0.3),transparent); }
 .back-btn { background:rgba(255,255,255,0.1); border:1px solid var(--glass-border); color:white; width:34px; height:34px; border-radius:50%; display:flex; justify-content:center; align-items:center; cursor:pointer; }
 .back-btn svg { fill:white; width:18px; height:18px; }
-.play-pause-btn { background:linear-gradient(135deg,var(--accent),var(--accent2)); width:54px; height:54px; border-radius:50%; display:flex; justify-content:center; align-items:center; cursor:pointer; margin:14px 20px 0; box-shadow:0 4px 20px rgba(167,139,250,0.5); transition:transform .15s; }
+.play-pause-btn { background:linear-gradient(135deg,var(--accent),var(--accent2)); width:54px; height:54px; border-radius:50%; display:flex; justify-content:center; align-items:center; cursor:pointer; margin:14px 20px 0; box-shadow:0 4px 20px rgba(167,139,250,0.5); }
 
 .play-pause-btn svg { fill:#fff; width:24px; height:24px; }
 
 /* BOTTOM NAV */
-.bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--nav-bg); -webkit- border-top:1px solid var(--glass-border); display:flex; justify-content:space-around; align-items:center; padding-top:10px; padding-bottom:max(14px, env(safe-area-inset-bottom, 14px)); z-index:1000; min-height:60px; }
+.bottom-nav { position:fixed; bottom:0; left:0; right:0; background:var(--nav-bg); border-top:1px solid var(--glass-border); display:flex; justify-content:space-around; align-items:center; padding-top:10px; padding-bottom:max(14px, env(safe-area-inset-bottom, 14px)); z-index:1000; min-height:60px; }
 .nav-item { color:var(--text-sub); font-size:10px; display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;  min-width:60px; padding-bottom:2px; }
 .nav-item.active { color:var(--accent); }
 .nav-item svg { width:22px; height:22px; fill:currentColor; }
 
 /* MINI PLAYER */
-.mini-player { position:fixed; bottom:calc(60px + env(safe-area-inset-bottom, 0px)); left:10px; right:10px; background:rgba(18,18,28,0.92); -webkit- border-radius:20px; padding:10px 14px; display:flex; align-items:center; gap:12px; z-index:900; cursor:pointer; animation:slideUpMini .35s cubic-bezier(.1,.9,.2,1); overflow:hidden; }
+.mini-player { position:fixed; bottom:calc(60px + env(safe-area-inset-bottom, 0px)); left:10px; right:10px; background:rgba(18,18,28,0.92); border-radius:20px; padding:10px 14px; display:flex; align-items:center; gap:12px; z-index:900; cursor:pointer; animation:slideUpMini .35s cubic-bezier(.1,.9,.2,1); overflow:hidden; }
 .mini-player::before { content:''; position:absolute; inset:0; background:var(--mini-accent, rgba(124,58,237,0.15)); pointer-events:none; }
 @keyframes slideUpMini { from{transform:translateY(100%)} to{transform:translateY(0)} }
 .mini-player img { width:44px; height:44px; border-radius:12px; object-fit:cover; flex-shrink:0; }
@@ -262,8 +262,8 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
 .lyrics-track-artist { font-size:13px; color:var(--text-sub); }
 .lyrics-body { flex:1; overflow-y:auto; padding:0 0 80px; will-change:scroll-position; }
 .lyrics-body::-webkit-scrollbar { display:none; }
-.lyric-line { font-size:22px; font-weight:700; line-height:1.7; color:rgba(255,255,255,.2); transition:color .4s,font-size .3s; padding:0 28px; }
-.lyric-line.lyric-active { color:#fff; font-size:26px; text-shadow:0 0 30px rgba(167,139,250,0.6); }
+.lyric-line { font-size:22px; font-weight:700; line-height:1.7; color:rgba(255,255,255,.2); padding:0 28px; contain:layout style; }
+.lyric-line.lyric-active { color:#fff; font-size:24px; }
 .lyric-line.lyric-past { color:rgba(255,255,255,.12); }
 
 /* TOAST */
@@ -311,9 +311,9 @@ body.light-mode { --bg-base:#f0f0ff; --bg-card:rgba(0,0,0,0.04); --bg-highlight:
 .dev-footer-text { text-align:center; font-size:12px; color:var(--text-sub); margin:30px 0 80px; line-height:1.8; }
 
 /* SETTINGS */
-.settings-header { padding:44px 20px 16px; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); -webkit- border-bottom:1px solid var(--glass-border); }
+.settings-header { padding:44px 20px 16px; position:sticky; top:0; z-index:50; background:rgba(10,10,15,0.95); border-bottom:1px solid var(--glass-border); }
 .settings-header h1 { font-size:26px; font-weight:800; background:linear-gradient(135deg,var(--accent),var(--accent2)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
-.settings-profile-card { margin:16px 16px 4px; background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(244,114,182,0.15)); border-radius:18px; padding:18px; display:flex; align-items:center; gap:14px; cursor:pointer; border:1px solid rgba(167,139,250,0.2); transition:transform .15s; }
+.settings-profile-card { margin:16px 16px 4px; background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(244,114,182,0.15)); border-radius:18px; padding:18px; display:flex; align-items:center; gap:14px; cursor:pointer; border:1px solid rgba(167,139,250,0.2); }
 
 .settings-avatar { width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:800; color:#fff; flex-shrink:0; overflow:hidden; box-shadow:0 4px 16px rgba(167,139,250,0.4); }
 .settings-profile-info { flex:1; }
@@ -364,10 +364,11 @@ body.font-xlarge .player-title { font-size: 30px !important; }
    PERFORMANCE — GPU hints for smooth scroll on low-end devices
    ============================================================ */
 .horizontal-scroll { -webkit-overflow-scrolling:touch; will-change:scroll-position; }
-.view-section { contain:style; }
-
+.view-section { contain:style layout; }
+.lyrics-body { will-change:scroll-position; contain:strict; }
 .mini-player { will-change:transform; }
 .modal-overlay { will-change:transform; }
+.player-art-wrapper { will-change:transform; }
 img { content-visibility:auto; }
 
 /* ===== TOUCH PERFORMANCE ===== */

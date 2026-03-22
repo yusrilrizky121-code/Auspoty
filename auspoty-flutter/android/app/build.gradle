@@ -29,8 +29,8 @@ android {
         applicationId "com.auspoty.app"
         minSdkVersion flutter.minSdkVersion
         targetSdk 35
-        versionCode 9
-        versionName "6.1.0"
+        versionCode 10
+        versionName "6.2.0"
         multiDexEnabled true
         // Only build for modern 64-bit ARM devices (covers 95%+ of Android phones)
         ndk {
