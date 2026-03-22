@@ -459,3 +459,6 @@ body.font-xlarge .v-title { font-size: 20px !important; } body.font-xlarge .h-ti
 
 /* ===== DOWNLOAD BTNS ===== */
 #downloadBtn:active, #downloadBtnMini:active { opacity: .6; }
+
+/* ===== HIDE VERCEL TOOLBAR ===== */
+vercel-live-feedback,vercel-toolbar,#__vercel-toolbar,[data-vercel-toolbar]{display:none!important;}
