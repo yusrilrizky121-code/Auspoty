@@ -212,25 +212,34 @@ function minimizePlayer() { document.getElementById('playerModal').style.display
 
 function startProgressBar() {
     stopProgressBar();
-    progressInterval = setInterval(() => {
+    // Cache DOM refs once — avoid repeated getElementById in hot loop
+    var _bar = document.getElementById('progressBar');
+    var _fill = document.getElementById('progressFill');
+    var _mf = document.getElementById('miniProgressFill');
+    var _ct = document.getElementById('currentTime');
+    var _tt = document.getElementById('totalTime');
+    var _modal = document.getElementById('playerModal');
+    var _mini = document.getElementById('miniPlayer');
+    var _lastPct = -1;
+    progressInterval = setInterval(function() {
         if (!ytPlayer || !ytPlayer.getCurrentTime) return;
-        const _modal = document.getElementById('playerModal');
-        const _mini = document.getElementById('miniPlayer');
-        if ((!_modal || _modal.style.display === 'none' || _modal.style.display === '') && (!_mini || _mini.style.display === 'none' || _mini.style.display === '')) return;
-        const cur = ytPlayer.getCurrentTime(), dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
-        if (dur > 0) {
-            const pct = (cur / dur) * 100;
-            const bar = document.getElementById('progressBar');
-            const fill = document.getElementById('progressFill');
-            const thumb = document.getElementById('progressThumb');
-            const mf = document.getElementById('miniProgressFill');
-            if (bar) bar.value = pct;
-            if (fill) fill.style.width = pct + '%';
-            if (thumb) thumb.style.left = pct + '%';
-            if (mf) mf.style.width = pct + '%';
-            _updateWaveform(pct);
-            const ct = document.getElementById('currentTime'); if (ct) ct.innerText = formatTime(cur);
-            const tt = document.getElementById('totalTime'); if (tt) tt.innerText = formatTime(dur);
+        if (_isScrolling) return;
+        var modalVis = _modal && _modal.style.display === 'flex';
+        var miniVis = _mini && _mini.style.display === 'flex';
+        if (!modalVis && !miniVis) return;
+        var cur = ytPlayer.getCurrentTime();
+        var dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        if (dur <= 0) return;
+        var pct = (cur / dur) * 100;
+        if (Math.abs(pct - _lastPct) < 0.3) return;
+        _lastPct = pct;
+        var pctStr = pct.toFixed(1) + '%';
+        if (_bar) _bar.value = pct;
+        if (_fill) _fill.style.width = pctStr;
+        if (_mf) _mf.style.width = pctStr;
+        if (modalVis) {
+            if (_ct) _ct.innerText = formatTime(cur);
+            if (_tt) _tt.innerText = formatTime(dur);
         }
     }, 1000);
 }
@@ -801,7 +810,7 @@ function clearLikedSongs() {
 // DOWNLOAD
 function downloadMusic() {
     if (!currentTrack) { showToast('Putar lagu dulu!'); return; }
-    // APK mode: download via Flutter native handler (background, no browser)
+    // APK mode: delegate to Flutter native downloader
     if (window.flutter_inappwebview) {
         showToast('Mengunduh... tunggu sebentar');
         try {
@@ -812,16 +821,17 @@ function downloadMusic() {
     // Web/PWA fallback
     showToast('Memulai unduhan...');
     apiFetch('/api/download?video_id=' + currentTrack.videoId + '&title=' + encodeURIComponent(currentTrack.title))
-        .then(function(res) { if (!res.ok) throw new Error('failed'); return res.blob(); })
-        .then(function(blob) {
+        .then(function(res) {
+            if (!res.ok) throw new Error('failed');
+            return res.blob();
+        }).then(function(blob) {
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url; a.download = (currentTrack.title || 'music') + '.mp3';
             document.body.appendChild(a); a.click();
             document.body.removeChild(a); URL.revokeObjectURL(url);
             showToast('Unduhan selesai!');
-        })
-        .catch(function() { showToast('Gagal mengunduh'); });
+        }).catch(function() { showToast('Gagal mengunduh'); });
 }
 
 // GOOGLE AUTH
