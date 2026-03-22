@@ -550,13 +550,22 @@ async function loadHomeData() {
     const rows = getHomeQueries();
     async function loadRow(row) {
         const el = document.getElementById(row.id); if (!el) return;
+        const sec = el.closest('.section-container');
         el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Memuat...</div>';
         try {
             const res = await apiFetch('/api/search?query=' + encodeURIComponent(row.query));
             const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 5).map(renderHCard).join('');
-            else el.innerHTML = '';
-        } catch(e) { el.innerHTML = ''; }
+            if (result.status === 'success' && result.data.length > 0) {
+                el.innerHTML = result.data.slice(0, 5).map(renderHCard).join('');
+                if (sec) sec.style.display = '';
+            } else {
+                el.innerHTML = '';
+                if (sec) sec.style.display = 'none';
+            }
+        } catch(e) {
+            el.innerHTML = '';
+            if (sec) sec.style.display = 'none';
+        }
     }
     // Load first 2 rows immediately, rest after 800ms delay
     for (let i = 0; i < rows.length; i++) {
