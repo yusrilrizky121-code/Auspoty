@@ -119,29 +119,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     }
   }
 
-  /// Update progress bar di JS dari posisi MediaPlayer native
-  void _startProgressTimer() {
-    _progressTimer?.cancel();
-    _progressTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
-      try {
-        final pos = await _ch.invokeMethod<int>('getPosition') ?? 0;
-        final dur = await _ch.invokeMethod<int>('getDuration') ?? 0;
-        if (dur > 0 && _wvc != null) {
-          await _wvc!.evaluateJavascript(source: """
-            (function(){
-              var pb = document.getElementById('progressBar');
-              var ct = document.getElementById('currentTime');
-              var tt = document.getElementById('totalTime');
-              if(pb) pb.value = $pos;
-              if(pb) pb.max = $dur;
-              if(ct) ct.innerText = _fmtTime($pos);
-              if(tt) tt.innerText = _fmtTime($dur);
-            })();
-          """);
-        }
-      } catch (_) {}
-    });
-  }
+  // Progress is handled by JS setInterval in ytPlayer — no native timer needed
+    // Progress handled by JS
+  void _startProgressTimer() {}
 
   Future<bool> _onBack() async {
     if (_wvc == null) return true;

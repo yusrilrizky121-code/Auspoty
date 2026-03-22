@@ -120,7 +120,7 @@ async function playNextSimilarSong() {
 }
 function getHighResImage(url) {
     if (!url) return 'https://via.placeholder.com/300x300?text=music';
-    return url.replace(/=w\d+-h\d+/, '=w500-h500').replace(/w\d+_h\d+/, 'w500_h500');
+    return url.replace(/=w\d+-h\d+/, '=w300-h300').replace(/w\d+_h\d+/, 'w300_h300');
 }
 
 // ============================================================
@@ -219,7 +219,7 @@ function startProgressBar() {
             const ct = document.getElementById('currentTime'); if (ct) ct.innerText = formatTime(cur);
             const tt = document.getElementById('totalTime'); if (tt) tt.innerText = formatTime(dur);
         }
-    }, 500);
+    }, 1000);
 }
 function stopProgressBar() { clearInterval(progressInterval); }
 function seekTo(value) {
@@ -348,13 +348,13 @@ function playMusicById(videoId) {
 function renderVItem(t) {
     _cacheTrack(t);
     return '<div class="v-item" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/48x48?text=music\'">' +
+        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/48x48?text=music\'">' +
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
 function renderHCard(t) {
     _cacheTrack(t);
     return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">' +
-        '<img class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/140x140?text=music\'">' +
+        '<img loading="lazy" class="h-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onerror="this.src=\'https://via.placeholder.com/140x140?text=music\'">' +
         '<div class="h-title">' + (t.title || '') + '</div></div>';
 }
 function renderArtistCard(name) {
@@ -369,8 +369,6 @@ const HOME_QUERIES_BY_LANG = {
         { id: 'rowGembira', query: 'lagu semangat gembira indonesia' },
         { id: 'rowCharts',  query: 'top hits indonesia 2025' },
         { id: 'rowGalau',   query: 'lagu galau sedih indonesia' },
-        { id: 'rowTiktok',  query: 'viral tiktok indonesia 2025' },
-        { id: 'rowHits',    query: 'lagu hits hari ini indonesia' },
     ],
     English: [
         { id: 'rowAnyar',   query: 'new english songs 2025' },
@@ -452,15 +450,22 @@ async function loadHomeData() {
     const artistEl = document.getElementById('rowArtists');
     if (artistEl) artistEl.innerHTML = ARTISTS.map(renderArtistCard).join('');
     applyLanguageTitles();
-    for (const row of getHomeQueries()) {
-        const el = document.getElementById(row.id); if (!el) continue;
+    // Lazy load: 2 rows at a time to avoid hammering API and blocking main thread
+    const rows = getHomeQueries();
+    async function loadRow(row) {
+        const el = document.getElementById(row.id); if (!el) return;
         el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Memuat...</div>';
         try {
             const res = await apiFetch('/api/search?query=' + encodeURIComponent(row.query));
             const result = await res.json();
-            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 10).map(renderHCard).join('');
-            else el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Tidak ada hasil.</div>';
-        } catch(e) { el.innerHTML = '<div style="color:var(--text-sub);padding:8px 0;font-size:13px;">Gagal memuat.</div>'; }
+            if (result.status === 'success' && result.data.length > 0) el.innerHTML = result.data.slice(0, 8).map(renderHCard).join('');
+            else el.innerHTML = '';
+        } catch(e) { el.innerHTML = ''; }
+    }
+    // Load first 2 rows immediately, rest after 800ms delay
+    for (let i = 0; i < rows.length; i++) {
+        if (i < 2) { loadRow(rows[i]); }
+        else { setTimeout(() => loadRow(rows[i]), 800 + (i - 2) * 400); }
     }
 }
 
@@ -641,7 +646,7 @@ function openAddToPlaylistModal() {
         const playlists = e.target.result || [];
         const list = document.getElementById('addToPlaylistList');
         if (playlists.length === 0) { list.innerHTML = '<div style="color:var(--text-sub);padding:16px;">Belum ada playlist.</div>'; }
-        else { list.innerHTML = playlists.map(pl => '<div class="v-item" onclick="addTrackToPlaylist(\'' + pl.id + '\')"><img class="v-img" src="' + (pl.img || 'https://via.placeholder.com/48x48?text=music') + '"><div class="v-info"><div class="v-title">' + pl.name + '</div><div class="v-sub">' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>').join(''); }
+        else { list.innerHTML = playlists.map(pl => '<div class="v-item" onclick="addTrackToPlaylist(\'' + pl.id + '\')"><img loading="lazy" class="v-img" src="' + (pl.img || 'https://via.placeholder.com/48x48?text=music') + '"><div class="v-info"><div class="v-title">' + pl.name + '</div><div class="v-sub">' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>').join(''); }
     };
 }
 function closeAddToPlaylistModal() { document.getElementById('addToPlaylistModal').style.display = 'none'; }
