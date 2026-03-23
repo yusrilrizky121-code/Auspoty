@@ -910,18 +910,18 @@ function downloadMusic() {
     }
     // Web/PWA fallback
     showToast('Memulai unduhan...');
-    apiFetch('/api/download?video_id=' + currentTrack.videoId + '&title=' + encodeURIComponent(currentTrack.title))
-        .then(function(res) {
-            if (!res.ok) throw new Error('failed');
-            return res.blob();
-        }).then(function(blob) {
-            var url = URL.createObjectURL(blob);
+    fetch('/api/download?video_id=' + currentTrack.videoId)
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.status !== 'success') throw new Error(data.message || 'failed');
             var a = document.createElement('a');
-            a.href = url; a.download = (currentTrack.title || 'music') + '.mp3';
+            a.href = data.url;
+            a.download = (data.title || currentTrack.title || 'music') + '.mp3';
+            a.target = '_blank';
             document.body.appendChild(a); a.click();
-            document.body.removeChild(a); URL.revokeObjectURL(url);
-            showToast('Unduhan selesai!');
-        }).catch(function() { showToast('Gagal mengunduh'); });
+            document.body.removeChild(a);
+            showToast('Unduhan dimulai!');
+        }).catch(function(e) { showToast('Gagal mengunduh: ' + (e.message||'')); });
 }
 
 // GOOGLE AUTH

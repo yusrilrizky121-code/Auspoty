@@ -435,8 +435,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
             min-width:60px!important;height:60px!important;cursor:pointer!important;color:rgba(255,255,255,0.5)!important;}
           .nav-item.active{color:#a78bfa!important;}
           .nav-item svg{width:22px!important;height:22px!important;fill:currentColor!important;}
-          body{padding-bottom:160px!important;}
-          .mini-player{bottom:68px!important;will-change:transform!important;}
+          body{padding-bottom:140px!important;}
+          .mini-player{bottom:calc(60px + env(safe-area-inset-bottom,0px))!important;will-change:transform!important;}
           .toast-notification.show{bottom:80px!important;}
           *{-webkit-tap-highlight-color:transparent!important;}
           .horizontal-scroll{will-change:auto!important;}
