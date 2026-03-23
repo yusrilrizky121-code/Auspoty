@@ -314,6 +314,52 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 );
 
                 c.addJavaScriptHandler(
+                  handlerName: 'playLocalFile',
+                  callback: (args) async {
+                    final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
+                    final artist = args.length > 1 ? args[1].toString() : '';
+                    final img    = args.length > 2 ? args[2].toString() : '';
+                    // Find the MP3 file in Downloads folder
+                    try {
+                      final dir  = await getExternalStorageDirectory();
+                      final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
+                      final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+                      final f    = File('${base}Download/$safe.mp3');
+                      if (await f.exists()) {
+                        // Notify native service for notification
+                        try {
+                          await _ch.invokeMethod('updateTrack', {
+                            'title': title, 'artist': artist,
+                            'isPlaying': true, 'imgUrl': img,
+                          });
+                        } catch (_) {}
+                        // Send file:// URL back to JS to play via HTML5 audio
+                        final fileUrl = 'file://${f.path}';
+                        await c.evaluateJavascript(source: """
+                          (function(){
+                            var au = document.getElementById('bgAudio');
+                            if (!au) { au = document.createElement('audio'); au.id='bgAudio'; au.style.display='none'; document.body.appendChild(au); }
+                            au.src = '${fileUrl.replaceAll("'", "\\'")}';
+                            au.play().catch(function(){});
+                            window._localAudioPlaying = true;
+                          })();
+                        """);
+                      } else {
+                        // File not found, fallback to stream
+                        await c.evaluateJavascript(source: """
+                          (function(){
+                            window._localAudioPlaying = false;
+                            if(window.ytPlayer && window.ytPlayer.loadVideoById) window.ytPlayer.loadVideoById(window.currentTrack.videoId);
+                          })();
+                        """);
+                      }
+                    } catch (e) {
+                      await c.evaluateJavascript(source: "if(window.ytPlayer&&window.ytPlayer.loadVideoById) window.ytPlayer.loadVideoById(window.currentTrack.videoId);");
+                    }
+                  },
+                );
+
+                c.addJavaScriptHandler(
                   handlerName: 'openDownload',
                   callback: (args) async {
                     final url = args.isNotEmpty ? args[0].toString() : '';

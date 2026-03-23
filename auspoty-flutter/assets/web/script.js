@@ -172,8 +172,26 @@ function playMusic(videoId, encodedData) {
     var _tt = document.getElementById('totalTime'); if (_tt) _tt.innerText = '0:00';
 
     // Putar audio via ytPlayer (baik di web maupun APK)
-    if (ytPlayer && ytPlayer.loadVideoById) {
-        ytPlayer.loadVideoById(videoId);
+    // Cek dulu apakah lagu ada di downloaded (offline mode)
+    if (window.flutter_inappwebview && db) {
+        const dlTx = db.transaction('downloaded_songs', 'readonly');
+        dlTx.objectStore('downloaded_songs').get(videoId).onsuccess = (e) => {
+            if (e.target.result) {
+                // Lagu ada di unduhan — minta Flutter play dari file lokal
+                try {
+                    window.flutter_inappwebview.callHandler('playLocalFile',
+                        currentTrack.title || '', currentTrack.artist || '', currentTrack.img || '');
+                } catch(err) {
+                    // Fallback ke stream online
+                    if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+                }
+            } else {
+                if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
+            }
+        };
+        dlTx.onerror = () => { if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId); };
+    } else {
+        if (ytPlayer && ytPlayer.loadVideoById) ytPlayer.loadVideoById(videoId);
     }
     _startBgKeepAlive();
     // Kirim info ke native service untuk notifikasi saja (tidak intercept audio)
