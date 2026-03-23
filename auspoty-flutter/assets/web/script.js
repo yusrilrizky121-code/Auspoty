@@ -209,6 +209,24 @@ function playMusic(videoId, encodedData) {
 
 // TOGGLE PLAY
 function togglePlay() {
+    // Check if playing local offline audio
+    if (window._localAudioPlaying) {
+        var au = document.getElementById('bgAudio');
+        if (au) {
+            if (!au.paused) {
+                au.pause();
+                isPlaying = false;
+                updatePlayPauseBtn(false);
+                if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicPaused'); } catch(e) {}
+            } else {
+                au.play().catch(function(){});
+                isPlaying = true;
+                updatePlayPauseBtn(true);
+                if (window.flutter_inappwebview) try { window.flutter_inappwebview.callHandler('onMusicResumed'); } catch(e) {}
+            }
+            return;
+        }
+    }
     if (!ytPlayer) return;
     if (isPlaying) {
         ytPlayer.pauseVideo();
@@ -240,21 +258,31 @@ function startProgressBar() {
     var _modal = document.getElementById('playerModal');
     var _mini  = document.getElementById('miniPlayer');
     var _lastPct = -1;
-    var _raf = null;
+    var _rafId = null;
     var _lastTick = 0;
+    var _active = true;
 
     function _tick(now) {
-        _raf = requestAnimationFrame(_tick);
+        if (!_active) return;
+        _rafId = requestAnimationFrame(_tick);
         // throttle to ~1fps — enough for progress bar
         if (now - _lastTick < 950) return;
         _lastTick = now;
-        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
         if (_isScrolling) return;
         var modalVis = _modal && _modal.style.display === 'flex';
         var miniVis  = _mini  && _mini.style.display  === 'flex';
         if (!modalVis && !miniVis) return;
-        var cur = ytPlayer.getCurrentTime();
-        var dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+
+        var cur = 0, dur = 0;
+        // Use bgAudio for offline, ytPlayer for online
+        var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
+        if (au && !isNaN(au.duration) && au.duration > 0) {
+            cur = au.currentTime;
+            dur = au.duration;
+        } else if (ytPlayer && ytPlayer.getCurrentTime) {
+            cur = ytPlayer.getCurrentTime();
+            dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
+        }
         if (dur <= 0) return;
         var pct = (cur / dur) * 100;
         if (Math.abs(pct - _lastPct) < 0.25) return;
@@ -268,12 +296,16 @@ function startProgressBar() {
             if (_tt) _tt.innerText = formatTime(dur);
         }
     }
-    _raf = requestAnimationFrame(_tick);
-    // store cancel handle on progressInterval for stopProgressBar
-    progressInterval = { _raf: _raf, _tickRef: _tick };
+    _rafId = requestAnimationFrame(_tick);
+    // store cancel handle — use object with cancel fn so stopProgressBar always works
+    progressInterval = {
+        cancel: function() { _active = false; if (_rafId) cancelAnimationFrame(_rafId); _rafId = null; }
+    };
 }
 function stopProgressBar() {
-    if (progressInterval && progressInterval._raf) {
+    if (progressInterval && progressInterval.cancel) {
+        progressInterval.cancel();
+    } else if (progressInterval && progressInterval._raf) {
         cancelAnimationFrame(progressInterval._raf);
     } else {
         clearInterval(progressInterval);
@@ -281,6 +313,11 @@ function stopProgressBar() {
     progressInterval = null;
 }
 function seekTo(value) {
+    var au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
+    if (au && !isNaN(au.duration) && au.duration > 0) {
+        au.currentTime = value / 100 * au.duration;
+        return;
+    }
     if (!ytPlayer) return;
     const dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
     if (dur > 0) ytPlayer.seekTo(value / 100 * dur, true);
@@ -342,15 +379,20 @@ function startLyricsScroll() {
     var _lastIdx = -1;
     var _lastTick = 0;
     var _rafId = null;
+    var _active = true;
 
     function _tick(now) {
+        if (!_active) return;
         _rafId = requestAnimationFrame(_tick);
         // throttle to ~2fps — enough for lyrics sync
         if (now - _lastTick < 480) return;
         _lastTick = now;
         if (_isScrolling) return;
         var cur = 0, dur = 0;
-        if (ytPlayer && ytPlayer.getCurrentTime) {
+        var _au = window._localAudioPlaying ? document.getElementById('bgAudio') : null;
+        if (_au && !isNaN(_au.duration) && _au.duration > 0) {
+            cur = _au.currentTime; dur = _au.duration;
+        } else if (ytPlayer && ytPlayer.getCurrentTime) {
             cur = ytPlayer.getCurrentTime();
             dur = ytPlayer.getDuration ? ytPlayer.getDuration() : 0;
         }
@@ -386,10 +428,14 @@ function startLyricsScroll() {
         currentHighlightIdx = idx;
     }
     _rafId = requestAnimationFrame(_tick);
-    lyricsScrollInterval = { _rafId: _rafId, _tickRef: _tick };
+    lyricsScrollInterval = {
+        cancel: function() { _active = false; if (_rafId) cancelAnimationFrame(_rafId); _rafId = null; }
+    };
 }
 function stopLyricsScroll() {
-    if (lyricsScrollInterval && lyricsScrollInterval._rafId) {
+    if (lyricsScrollInterval && lyricsScrollInterval.cancel) {
+        lyricsScrollInterval.cancel();
+    } else if (lyricsScrollInterval && lyricsScrollInterval._rafId) {
         cancelAnimationFrame(lyricsScrollInterval._rafId);
     } else {
         clearInterval(lyricsScrollInterval);
@@ -645,7 +691,7 @@ var _scrollTimer = null;
 function _onScrollStart() {
     _isScrolling = true;
     clearTimeout(_scrollTimer);
-    _scrollTimer = setTimeout(function() { _isScrolling = false; }, 150);
+    _scrollTimer = setTimeout(function() { _isScrolling = false; }, 250);
 }
 document.addEventListener('scroll', _onScrollStart, { passive: true });
 document.addEventListener('touchmove', _onScrollStart, { passive: true });

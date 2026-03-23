@@ -217,11 +217,15 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       final streamUrl = apiJson['url'] as String;
       final apiTitle  = (apiJson['title'] as String?) ?? title;
       final ext       = (apiJson['ext'] as String?) ?? 'mp4';
+      final apiHeaders = (apiJson['headers'] as Map<String, dynamic>?) ?? {};
       // Step 2: Download audio directly from YouTube CDN
       _wvc?.evaluateJavascript(source: "showToast('Mengunduh audio...');");
       final dlReq = http.Request('GET', Uri.parse(streamUrl));
-      dlReq.headers['User-Agent'] = 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36';
-      dlReq.headers['Referer'] = 'https://www.youtube.com/';
+      // Apply headers from API (YouTube CDN requires specific headers)
+      apiHeaders.forEach((k, v) { try { dlReq.headers[k] = v.toString(); } catch (_) {} });
+      if (!dlReq.headers.containsKey('User-Agent')) {
+        dlReq.headers['User-Agent'] = 'com.google.android.youtube/17.36.4 (Linux; U; Android 12) gzip';
+      }
       final dlStream = await http.Client().send(dlReq).timeout(const Duration(seconds: 120));
       if (dlStream.statusCode != 200) throw Exception('DL ${dlStream.statusCode}');
       final bytes = await dlStream.stream.toBytes().timeout(const Duration(seconds: 120));
@@ -233,11 +237,22 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       await f.parent.create(recursive: true);
       await f.writeAsBytes(bytes);
       // Step 4: Save metadata to IndexedDB so it shows in Koleksi > Lagu Diunduh
+      // Also store videoId→filename mapping for offline playback lookup
+      final prefs = await SharedPreferences.getInstance();
+      final mapJson = prefs.getString('downloadedFiles') ?? '{}';
+      final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
+      fileMap[videoId] = {'filename': safe, 'ext': ext, 'title': apiTitle};
+      await prefs.setString('downloadedFiles', json.encode(fileMap));
+
       await _wvc?.evaluateJavascript(source: """
         (function(){
-          if(typeof saveDownloadedSong==='function' && window.currentTrack){
-            saveDownloadedSong(window.currentTrack);
-          }
+          var track = {
+            videoId: '$videoId',
+            title: '${apiTitle.replaceAll("'", "\\'")}',
+            artist: window.currentTrack ? (window.currentTrack.artist || '') : '',
+            img: window.currentTrack ? (window.currentTrack.img || '') : ''
+          };
+          if(typeof saveDownloadedSong==='function') saveDownloadedSong(track);
           showToast('\u2713 Tersimpan: $t2');
         })();
       """);
@@ -361,17 +376,35 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
                     final artist = args.length > 1 ? args[1].toString() : '';
                     final img    = args.length > 2 ? args[2].toString() : '';
+                    final videoId = args.length > 3 ? args[3].toString() : '';
                     // Find the audio file in Downloads folder (mp4/webm/mp3)
                     try {
                       final dir  = await getExternalStorageDirectory();
                       final base = dir?.path.replaceAll(RegExp(r'Android.*'), '') ?? '/storage/emulated/0/';
-                      final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-                      // Try common extensions
+                      // First try: look up exact filename from SharedPreferences map
                       File? found;
                       String? foundExt;
-                      for (final ext in ['mp4', 'webm', 'mp3', 'm4a']) {
-                        final f = File('${base}Download/$safe.$ext');
-                        if (await f.exists()) { found = f; foundExt = ext; break; }
+                      if (videoId.isNotEmpty) {
+                        final prefs = await SharedPreferences.getInstance();
+                        final mapJson = prefs.getString('downloadedFiles') ?? '{}';
+                        final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
+                        if (fileMap.containsKey(videoId)) {
+                          final info = fileMap[videoId] as Map<String, dynamic>;
+                          final fn = info['filename']?.toString() ?? '';
+                          final ex = info['ext']?.toString() ?? 'mp4';
+                          if (fn.isNotEmpty) {
+                            final f = File('${base}Download/$fn.$ex');
+                            if (await f.exists()) { found = f; foundExt = ex; }
+                          }
+                        }
+                      }
+                      // Fallback: search by sanitized title
+                      if (found == null) {
+                        final safe = title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+                        for (final ext in ['mp4', 'webm', 'mp3', 'm4a']) {
+                          final f = File('${base}Download/$safe.$ext');
+                          if (await f.exists()) { found = f; foundExt = ext; break; }
+                        }
                       }
                       if (found != null) {
                         // Notify native service for notification
@@ -386,11 +419,38 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                         final localUrl = 'http://127.0.0.1:$_fileServerPort/audio.$foundExt';
                         await c.evaluateJavascript(source: """
                           (function(){
-                            var au = document.getElementById('bgAudio');
-                            if (!au) { au = document.createElement('audio'); au.id='bgAudio'; au.style.display='none'; document.body.appendChild(au); }
-                            au.src = '${localUrl.replaceAll("'", "\\'")}';
-                            au.play().catch(function(e){ console.log('local play err',e); });
                             window._localAudioPlaying = true;
+                            var au = document.getElementById('bgAudio');
+                            if (!au) {
+                              au = document.createElement('audio');
+                              au.id = 'bgAudio';
+                              au.style.display = 'none';
+                              document.body.appendChild(au);
+                            }
+                            // Remove old listeners
+                            au.onplay = null; au.onpause = null; au.onended = null;
+                            au.src = '${localUrl.replaceAll("'", "\\'")}';
+                            au.onplay = function() {
+                              isPlaying = true;
+                              updatePlayPauseBtn(true);
+                              _setArtPlaying(true);
+                              startProgressBar();
+                            };
+                            au.onpause = function() {
+                              isPlaying = false;
+                              updatePlayPauseBtn(false);
+                              _setArtPlaying(false);
+                            };
+                            au.onended = function() {
+                              isPlaying = false;
+                              window._localAudioPlaying = false;
+                              updatePlayPauseBtn(false);
+                              _setArtPlaying(false);
+                              stopProgressBar();
+                              if (isRepeat) { au.currentTime = 0; au.play(); }
+                              else playNextSimilarSong();
+                            };
+                            au.play().catch(function(e){ console.log('local play err', e); });
                           })();
                         """);
                       } else {
@@ -541,12 +601,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
           .mini-player{bottom:64px!important;will-change:transform!important;}
           .toast-notification.show{bottom:80px!important;}
           *{-webkit-tap-highlight-color:transparent!important;}
-          .horizontal-scroll{will-change:auto!important;}
-          img{content-visibility:auto!important;}
           html,body{-webkit-overflow-scrolling:touch!important;scroll-behavior:auto!important;}
-          .v-item,.lib-item{content-visibility:visible!important;contain:none!important;}
           .view-section.active{contain:none!important;}
-          .modal-overlay{transition:none!important;}
+          img{content-visibility:visible!important;}
           @keyframes slideUpMini{from{opacity:0}to{opacity:1}}
           @keyframes slideUp{from{opacity:0}to{opacity:1}}
         `;

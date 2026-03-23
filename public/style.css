@@ -44,7 +44,6 @@ body.light-mode {
 img {
     decoding: async;
     image-rendering: auto;
-    content-visibility: auto;
 }
 
 /* ===== REDUCE MOTION ===== */
@@ -56,8 +55,7 @@ img {
 .view-section { display: none; }
 .view-section.active {
     display: block;
-    /* contain layout+style so browser doesn't repaint siblings */
-    contain: layout style;
+    /* NO contain — causes repaint/compositing issues on Android WebView */
 }
 
 /* ===== TOUCH — no 300ms delay on all tappables ===== */
