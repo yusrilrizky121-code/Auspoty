@@ -223,7 +223,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     return true;
   }
 
-  Future<void> _download(String videoId, String title) async {
+  Future<void> _download(String videoId, String title, {String artist = '', String img = ''}) async {
     final t2 = title.replaceAll("'", "\\'");
     try {
       _wvc?.evaluateJavascript(source: "showToast('Mengonversi lagu... tunggu sebentar');");
@@ -268,13 +268,39 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       await prefs.setString('downloadedFiles', json.encode(fileMap));
 
       // Step 5: Save to IndexedDB so it shows in Koleksi > Lagu Diunduh
+      // Also grab artist+img from JS currentTrack and store in SharedPreferences
+      String resolvedArtist = artist;
+      String resolvedImg    = img;
+      if (resolvedArtist.isEmpty || resolvedImg.isEmpty) {
+        final metaResult = await _wvc?.evaluateJavascript(source: """
+          (function(){
+            var ct = window.currentTrack || {};
+            return JSON.stringify({ artist: ct.artist||'', img: ct.img||ct.thumbnail||'' });
+          })();
+        """);
+        try {
+          final meta = json.decode(metaResult?.toString() ?? '{}') as Map<String, dynamic>;
+          if (resolvedArtist.isEmpty) resolvedArtist = meta['artist']?.toString() ?? '';
+          if (resolvedImg.isEmpty)    resolvedImg    = meta['img']?.toString()    ?? '';
+        } catch (_) {}
+      }
+
+      // Update SharedPreferences entry with artist+img
+      final prefs2   = await SharedPreferences.getInstance();
+      final mapJson2 = prefs2.getString('downloadedFiles') ?? '{}';
+      final Map<String, dynamic> fileMap2 = Map<String, dynamic>.from(json.decode(mapJson2));
+      fileMap2[videoId] = {'filename': safe, 'ext': ext, 'title': apiTitle, 'artist': resolvedArtist, 'img': resolvedImg};
+      await prefs2.setString('downloadedFiles', json.encode(fileMap2));
+
+      final safeArtist = resolvedArtist.replaceAll("'", "\\'");
+      final safeImg    = resolvedImg.replaceAll("'", "\\'");
       await _wvc?.evaluateJavascript(source: """
         (function(){
           var track = {
             videoId: '$videoId',
             title: '${apiTitle.replaceAll("'", "\\'")}',
-            artist: window.currentTrack ? (window.currentTrack.artist || '') : '',
-            img: window.currentTrack ? (window.currentTrack.img || '') : ''
+            artist: '$safeArtist',
+            img: '$safeImg'
           };
           if(typeof saveDownloadedSong==='function') saveDownloadedSong(track);
           showToast('\u2713 Tersimpan: ${t2.length > 30 ? t2.substring(0, 30) : t2}');
@@ -285,6 +311,89 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       final short = msg.length > 60 ? msg.substring(0, 60) : msg;
       _wvc?.evaluateJavascript(source: "showToast('Download gagal: ${short.replaceAll("'", "\\'")}');");
     }
+  }
+
+  void _playOfflineTrack(String videoId, String title, String artist, String img, String filePath, String ext) async {
+    _servedFilePath = filePath;
+    final localUrl = 'http://127.0.0.1:$_fileServerPort/audio.$ext';
+    // Update native notification
+    try {
+      await _ch.invokeMethod('updateTrack', {
+        'title': title, 'artist': artist,
+        'isPlaying': true, 'imgUrl': img,
+      });
+    } catch (_) {}
+    // Inject audio into WebView if it's alive, otherwise just serve via local server
+    await _wvc?.evaluateJavascript(source: """
+      (function(){
+        window._localAudioPlaying = true;
+        window.currentTrack = { videoId: '${videoId.replaceAll("'", "\\'")}', title: '${title.replaceAll("'", "\\'")}', artist: '${artist.replaceAll("'", "\\'")}', img: '${img.replaceAll("'", "\\'")}' };
+        var au = document.getElementById('bgAudio');
+        if (!au) { au = document.createElement('audio'); au.id = 'bgAudio'; au.style.display='none'; document.body.appendChild(au); }
+        au.src = '${localUrl.replaceAll("'", "\\'")}';
+        au.onplay = function(){ isPlaying=true; updatePlayPauseBtn(true); _setArtPlaying(true); startProgressBar(); };
+        au.onpause = function(){ isPlaying=false; updatePlayPauseBtn(false); _setArtPlaying(false); };
+        au.onended = function(){ isPlaying=false; window._localAudioPlaying=false; updatePlayPauseBtn(false); stopProgressBar(); if(isRepeat){au.currentTime=0;au.play();}else playNextSimilarSong(); };
+        au.play().catch(function(e){ console.log('offline play err',e); });
+        // Update mini player UI
+        var mp=document.getElementById('miniPlayer'); if(mp) mp.style.display='flex';
+        var mpi=document.getElementById('miniPlayerImg'); if(mpi) mpi.src='${img.replaceAll("'", "\\'")}';
+        var mpt=document.getElementById('miniPlayerTitle'); if(mpt) mpt.innerText='${title.replaceAll("'", "\\'")}';
+        var mpa=document.getElementById('miniPlayerArtist'); if(mpa) mpa.innerText='${artist.replaceAll("'", "\\'")}';
+      })();
+    """);
+  }
+
+  void _showOfflinePlayerSheet(Map<String, dynamic> fileMap) {
+    // Build list of songs with their file info
+    final songs = <Map<String, dynamic>>[];
+    fileMap.forEach((videoId, val) {
+      if (val is Map) {
+        songs.add({
+          'videoId': videoId,
+          'title':    val['title']?.toString()    ?? 'Unknown',
+          'artist':   val['artist']?.toString()   ?? '',
+          'img':      val['img']?.toString()      ?? '',
+          'filename': val['filename']?.toString() ?? '',
+          'ext':      val['ext']?.toString()      ?? 'mp3',
+        });
+      }
+    });
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF1a1a2e),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _OfflinePlayerSheet(
+        songs: songs,
+        onPlay: (song) async {
+          final appDir = await getApplicationDocumentsDirectory();
+          final fn  = song['filename'] as String;
+          final ext = song['ext'] as String;
+          final f   = File('${appDir.path}/$fn.$ext');
+          if (await f.exists()) {
+            _playOfflineTrack(
+              song['videoId'] as String,
+              song['title']   as String,
+              song['artist']  as String,
+              song['img']     as String,
+              f.path, ext,
+            );
+          } else {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                content: Text('File tidak ditemukan'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ));
+            }
+          }
+        },
+      ),
+    );
   }
 
   @override
@@ -388,9 +497,11 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 c.addJavaScriptHandler(
                   handlerName: 'downloadTrack',
                   callback: (args) async {
-                    final vid   = args.isNotEmpty ? args[0].toString() : '';
-                    final title = args.length > 1 ? args[1].toString() : 'lagu';
-                    if (vid.isNotEmpty) _download(vid, title);
+                    final vid    = args.isNotEmpty ? args[0].toString() : '';
+                    final title  = args.length > 1 ? args[1].toString() : 'lagu';
+                    final artist = args.length > 2 ? args[2].toString() : '';
+                    final img    = args.length > 3 ? args[3].toString() : '';
+                    if (vid.isNotEmpty) _download(vid, title, artist: artist, img: img);
                   },
                 );
 
@@ -492,6 +603,28 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                           window.ytPlayer.loadVideoById(window.currentTrack.videoId);
                       """);
                     }
+                  },
+                );
+
+                // Handler untuk offline player — dipanggil dari JS saat offline
+                c.addJavaScriptHandler(
+                  handlerName: 'openOfflinePlayer',
+                  callback: (args) async {
+                    if (!mounted) return;
+                    final prefs   = await SharedPreferences.getInstance();
+                    final mapJson = prefs.getString('downloadedFiles') ?? '{}';
+                    final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
+                    if (fileMap.isEmpty) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('Belum ada lagu diunduh'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                      return;
+                    }
+                    if (mounted) _showOfflinePlayerSheet(fileMap);
                   },
                 );
 
@@ -712,4 +845,104 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
       })();
     """);
   }
+}
+
+// ─── Offline Player Bottom Sheet ────────────────────────────────────────────
+class _OfflinePlayerSheet extends StatefulWidget {
+  final List<Map<String, dynamic>> songs;
+  final Future<void> Function(Map<String, dynamic> song) onPlay;
+  const _OfflinePlayerSheet({required this.songs, required this.onPlay});
+  @override
+  State<_OfflinePlayerSheet> createState() => _OfflinePlayerSheetState();
+}
+
+class _OfflinePlayerSheetState extends State<_OfflinePlayerSheet> {
+  String? _playingId;
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.92,
+      minChildSize: 0.3,
+      builder: (_, sc) => Column(
+        children: [
+          // Handle bar
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10),
+            width: 40, height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(children: [
+              const Icon(Icons.download_done, color: Color(0xFFa78bfa), size: 22),
+              const SizedBox(width: 8),
+              const Text('Lagu Diunduh',
+                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Text('${widget.songs.length} lagu',
+                style: const TextStyle(color: Colors.white54, fontSize: 13)),
+            ]),
+          ),
+          const Divider(color: Colors.white12, height: 1),
+          Expanded(
+            child: widget.songs.isEmpty
+              ? const Center(child: Text('Belum ada lagu diunduh',
+                  style: TextStyle(color: Colors.white54)))
+              : ListView.builder(
+                  controller: sc,
+                  itemCount: widget.songs.length,
+                  itemBuilder: (_, i) {
+                    final s = widget.songs[i];
+                    final vid = s['videoId'] as String;
+                    final isPlaying = _playingId == vid;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      leading: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: (s['img'] as String).isNotEmpty
+                          ? Image.network(s['img'] as String,
+                              width: 52, height: 52, fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => _defaultArt())
+                          : _defaultArt(),
+                      ),
+                      title: Text(s['title'] as String,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isPlaying ? const Color(0xFFa78bfa) : Colors.white,
+                          fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                          fontSize: 14,
+                        )),
+                      subtitle: Text(s['artist'] as String,
+                        maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      trailing: isPlaying
+                        ? const Icon(Icons.equalizer, color: Color(0xFFa78bfa), size: 22)
+                        : const Icon(Icons.play_circle_outline, color: Colors.white54, size: 26),
+                      onTap: () async {
+                        setState(() => _playingId = vid);
+                        await widget.onPlay(s);
+                      },
+                    );
+                  },
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _defaultArt() => Container(
+    width: 52, height: 52,
+    decoration: BoxDecoration(
+      color: const Color(0xFF2d2d4e),
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: const Icon(Icons.music_note, color: Color(0xFFa78bfa), size: 26),
+  );
 }

@@ -827,6 +827,27 @@ function openHistoryView() {
     switchView('playlist');
 }
 function openDownloadedSongs() {
+    // Kalau Flutter tersedia, pakai native bottom sheet (bisa offline)
+    if (window.flutter_inappwebview) {
+        try {
+            window.flutter_inappwebview.callHandler('openOfflinePlayer');
+        } catch(e) {}
+        if (!db) return;
+        const tx = db.transaction('downloaded_songs', 'readonly');
+        tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => {
+            const tracks = e.target.result || [];
+            document.getElementById('playlistNameDisplay').innerText = 'Lagu Diunduh';
+            document.getElementById('playlistStatsDisplay').innerText = tracks.length + ' lagu';
+            document.getElementById('playlistImageDisplay').src = tracks.length > 0 ? (tracks[0].img || '') : 'https://via.placeholder.com/220x220?text=music';
+            window._playlistTracks = tracks;
+            window._isDownloadedView = true;
+            document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0
+                ? tracks.map(t => renderDownloadedVItem(t)).join('')
+                : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu diunduh.</div>';
+            switchView('playlist');
+        };
+        return;
+    }
     if (!db) return;
     const tx = db.transaction('downloaded_songs', 'readonly');
     tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => {
@@ -1027,7 +1048,12 @@ function downloadMusic() {
     if (window.flutter_inappwebview) {
         showToast('Mengonversi lagu... tunggu sebentar');
         try {
-            window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
+            window.flutter_inappwebview.callHandler('downloadTrack',
+                currentTrack.videoId,
+                currentTrack.title || 'lagu',
+                currentTrack.artist || '',
+                currentTrack.img || currentTrack.thumbnail || ''
+            );
         } catch(e) { showToast('Download gagal, coba lagi'); }
         return;
     }
