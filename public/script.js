@@ -11,11 +11,12 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 // INDEXEDDB
 let db;
-const dbReq = indexedDB.open('AuspotyDB', 1);
+const dbReq = indexedDB.open('AuspotyDB', 2);
 dbReq.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('liked_songs')) db.createObjectStore('liked_songs', { keyPath: 'videoId' });
+    if (!db.objectStoreNames.contains('downloaded_songs')) db.createObjectStore('downloaded_songs', { keyPath: 'videoId' });
 };
 dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
@@ -443,6 +444,14 @@ function renderVItem(t) {
         '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '">' +
         '<div class="v-info"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div></div>';
 }
+function renderDownloadedVItem(t) {
+    _cacheTrack(t);
+    return '<div class="v-item">' +
+        '<img loading="lazy" class="v-img" src="' + getHighResImage(t.thumbnail || t.img || '') + '" onclick="playMusicById(\'' + t.videoId + '\')">' +
+        '<div class="v-info" onclick="playMusicById(\'' + t.videoId + '\')"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>' +
+        '<svg onclick="deleteDownloadedSong(\'' + t.videoId + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.4);width:22px;height:22px;flex-shrink:0;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
+        '</div>';
+}
 function renderHCard(t) {
     _cacheTrack(t);
     return '<div class="h-card" onclick="playMusicById(\'' + t.videoId + '\')">' +
@@ -698,16 +707,17 @@ function toggleLike() {
 // LIBRARY
 function renderLibraryUI() {
     const container = document.getElementById('libraryContainer'); if (!container || !db) return;
-    const tx = db.transaction(['liked_songs', 'playlists'], 'readonly');
-    let liked = [], playlists = [];
+    const tx = db.transaction(['liked_songs', 'playlists', 'downloaded_songs'], 'readonly');
+    let liked = [], playlists = [], downloaded = [];
     tx.objectStore('liked_songs').getAll().onsuccess = (e) => { liked = e.target.result || []; };
     tx.objectStore('playlists').getAll().onsuccess = (e) => { playlists = e.target.result || []; };
+    tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => { downloaded = e.target.result || []; };
     tx.oncomplete = () => {
         const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
         let html = '';
         html += '<div class="lib-item" onclick="openLikedSongs()"><div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist \u00b7 ' + liked.length + ' lagu</div></div></div>';
         html += '<div class="lib-item" onclick="openHistoryView()"><div class="lib-item-img" style="background:linear-gradient(135deg,#1e3264,#477d95);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Riwayat Diputar</div><div class="lib-item-sub">Koleksi \u00b7 ' + history.length + ' lagu</div></div></div>';
-        html += '<div class="lib-item" onclick="showToast(\'Fitur unduhan segera hadir!\')"><div class="lib-item-img" style="background:linear-gradient(135deg,#2d6a4f,#739c18);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu Diunduh</div><div class="lib-item-sub">Koleksi \u00b7 Segera hadir</div></div></div>';
+        html += '<div class="lib-item" onclick="openDownloadedSongs()"><div class="lib-item-img" style="background:linear-gradient(135deg,#2d6a4f,#739c18);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu Diunduh</div><div class="lib-item-sub">Koleksi \u00b7 ' + downloaded.length + ' lagu</div></div></div>';
         playlists.forEach(pl => {
             html += '<div class="lib-item" onclick="openPlaylist(\'' + pl.id + '\')"><img class="lib-item-img" src="' + (pl.img || 'https://via.placeholder.com/64x64?text=music') + '" style="border-radius:4px;"><div class="lib-item-info"><div class="lib-item-title">' + pl.name + '</div><div class="lib-item-sub">Playlist \u00b7 ' + (pl.tracks ? pl.tracks.length : 0) + ' lagu</div></div></div>';
         });
@@ -735,6 +745,40 @@ function openHistoryView() {
     window._playlistTracks = history;
     document.getElementById('playlistTracksContainer').innerHTML = history.length > 0 ? history.map(renderVItem).join('') : '<div style="color:var(--text-sub);padding:16px;">Belum ada riwayat.</div>';
     switchView('playlist');
+}
+function openDownloadedSongs() {
+    if (!db) return;
+    const tx = db.transaction('downloaded_songs', 'readonly');
+    tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => {
+        const tracks = e.target.result || [];
+        document.getElementById('playlistNameDisplay').innerText = 'Lagu Diunduh';
+        document.getElementById('playlistStatsDisplay').innerText = tracks.length + ' lagu';
+        document.getElementById('playlistImageDisplay').src = tracks.length > 0 ? (tracks[0].img || '') : 'https://via.placeholder.com/220x220?text=music';
+        window._playlistTracks = tracks;
+        window._isDownloadedView = true;
+        document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0
+            ? tracks.map(t => renderDownloadedVItem(t)).join('')
+            : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu diunduh.</div>';
+        switchView('playlist');
+    };
+}
+function saveDownloadedSong(track) {
+    if (!db || !track || !track.videoId) return;
+    const tx = db.transaction('downloaded_songs', 'readwrite');
+    tx.objectStore('downloaded_songs').put({
+        videoId: track.videoId,
+        title: track.title || '',
+        artist: track.artist || '',
+        img: track.img || '',
+        downloadedAt: Date.now()
+    });
+    tx.oncomplete = () => renderLibraryUI();
+}
+function deleteDownloadedSong(videoId) {
+    if (!db) return;
+    const tx = db.transaction('downloaded_songs', 'readwrite');
+    tx.objectStore('downloaded_songs').delete(videoId);
+    tx.oncomplete = () => { showToast('Dihapus dari unduhan'); openDownloadedSongs(); };
 }
 function openPlaylist(id) {
     if (!db) return;
@@ -905,6 +949,7 @@ function downloadMusic() {
         showToast('Mengunduh... tunggu sebentar');
         try {
             window.flutter_inappwebview.callHandler('downloadTrack', currentTrack.videoId, currentTrack.title || 'lagu');
+            saveDownloadedSong(currentTrack);
         } catch(e) { showToast('Download gagal, coba lagi'); }
         return;
     }
@@ -920,6 +965,7 @@ function downloadMusic() {
             a.target = '_blank';
             document.body.appendChild(a); a.click();
             document.body.removeChild(a);
+            saveDownloadedSong(currentTrack);
             showToast('Unduhan dimulai!');
         }).catch(function(e) { showToast('Gagal mengunduh: ' + (e.message||'')); });
 }

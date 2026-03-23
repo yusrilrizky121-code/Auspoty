@@ -17,10 +17,12 @@ const _base = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.ap
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
-    systemNavigationBarColor: Color(0xFF0a0a0f),
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
     systemNavigationBarIconBrightness: Brightness.light,
   ));
   runApp(const AuspotyApp());
@@ -216,7 +218,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         backgroundColor: const Color(0xFF0a0a0f),
         resizeToAvoidBottomInset: false,
         body: SafeArea(
-          top: true, bottom: false,
+          top: true, bottom: true,
           child: Stack(children: [
             InAppWebView(
               keepAlive: _keepAlive,
@@ -228,8 +230,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
                 allowBackgroundAudioPlaying: true,
-                // TextureView (true) = smoother scroll on Android 9+, better compositing
-                useHybridComposition: true,
+                // TextureView (false) = smoother scroll, GPU composited, better 60fps
+                useHybridComposition: false,
                 allowFileAccessFromFileURLs: false,
                 allowUniversalAccessFromFileURLs: false,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
@@ -436,11 +438,18 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
           .nav-item.active{color:#a78bfa!important;}
           .nav-item svg{width:22px!important;height:22px!important;fill:currentColor!important;}
           body{padding-bottom:140px!important;}
-          .mini-player{bottom:calc(60px + env(safe-area-inset-bottom,0px))!important;will-change:transform!important;}
+          .mini-player{bottom:64px!important;will-change:transform!important;}
           .toast-notification.show{bottom:80px!important;}
           *{-webkit-tap-highlight-color:transparent!important;}
           .horizontal-scroll{will-change:auto!important;}
           img{content-visibility:auto!important;}
+          html,body{-webkit-overflow-scrolling:touch!important;scroll-behavior:auto!important;}
+          .v-item,.lib-item{content-visibility:visible!important;contain:none!important;}
+          .view-section.active{contain:none!important;}
+          *{transition-duration:0.1s!important;}
+          .modal-overlay{transition:none!important;}
+          @keyframes slideUpMini{from{opacity:0}to{opacity:1}}
+          @keyframes slideUp{from{opacity:0}to{opacity:1}}
         `;
         document.head.appendChild(s);
       })();
