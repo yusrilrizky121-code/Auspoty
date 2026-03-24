@@ -3,14 +3,16 @@ package com.auspoty.app
 import android.content.ComponentName
 import android.content.Intent
 import android.content.ServiceConnection
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.os.PowerManager
+import android.provider.Settings
 import androidx.work.*
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.util.concurrent.TimeUnit
 
 class MainActivity : FlutterActivity() {
 
@@ -82,6 +84,7 @@ class MainActivity : FlutterActivity() {
         startServiceSafe(Intent(this, MusicPlayerService::class.java))
         bindService(Intent(this, MusicPlayerService::class.java), conn, BIND_AUTO_CREATE)
         scheduleAnnouncementWorker()
+        requestBatteryExemption()
     }
 
     override fun onResume() {
@@ -115,19 +118,21 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun scheduleAnnouncementWorker() {
-        val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
-            .build()
+        BootReceiver.scheduleWorker(this)
+    }
 
-        // Jalankan setiap 15 menit (minimum WorkManager)
-        val request = PeriodicWorkRequestBuilder<AnnouncementWorker>(15, TimeUnit.MINUTES)
-            .setConstraints(constraints)
-            .build()
-
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
-            "auspoty_announcement_check",
-            ExistingPeriodicWorkPolicy.KEEP,  // jangan replace kalau sudah ada
-            request
-        )
+    private fun requestBatteryExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    })
+                } catch (e: Exception) {
+                    android.util.Log.w("MainActivity", "Battery exemption request failed: ${e.message}")
+                }
+            }
+        }
     }
 }
