@@ -1243,46 +1243,20 @@ function closeAnnouncementPanel() {
     if (modal) modal.style.display = 'none';
 }
 
-// Tulis announcement via Firestore REST API pakai ID token Firebase Auth
-// Ini bypass Firestore SDK rules issue — pakai authenticated REST call
-const _FS_PROJECT = 'auspoty-web';
-const _FS_DOC_URL = `https://firestore.googleapis.com/v1/projects/${_FS_PROJECT}/databases/(default)/documents/announcements/current`;
+// Tulis announcement via Firestore REST API — langsung pakai API key, tidak butuh auth token
+const _FS_ANN_URL = 'https://firestore.googleapis.com/v1/projects/auspoty-web/databases/(default)/documents/announcements/current?key=AIzaSyAYJEVXTS17vEX4J6_ymevMiJUnWV-Xf8Q';
 
-async function _getFirebaseIdToken() {
-    const auth = window._firebaseAuth;
-    if (!auth || !auth.currentUser) throw new Error('Belum login');
-    return await auth.currentUser.getIdToken(true);
-}
-
-function _toFsValue(v) {
-    if (v === null || v === undefined) return { nullValue: null };
-    if (typeof v === 'boolean') return { booleanValue: v };
-    if (typeof v === 'number') return { integerValue: String(v) };
-    return { stringValue: String(v) };
-}
-
-async function _writeAnnouncementREST(data) {
-    const token = await _getFirebaseIdToken();
-    const fields = {};
-    for (const [k, v] of Object.entries(data)) {
-        if (k === 'createdAt') {
-            fields[k] = { timestampValue: new Date().toISOString() };
-        } else {
-            fields[k] = _toFsValue(v);
-        }
-    }
-    const res = await fetch(_FS_DOC_URL, {
+async function _writeAnnouncementREST(fields) {
+    const res = await fetch(_FS_ANN_URL, {
         method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fields })
     });
     if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${res.status}`);
+        throw new Error(err.error?.message || 'HTTP ' + res.status);
     }
+    return res.json();
 }
 
 async function sendAnnouncement() {
@@ -1295,10 +1269,11 @@ async function sendAnnouncement() {
     if (btn) { btn.disabled = true; btn.innerText = 'Mengirim...'; }
     try {
         await _writeAnnouncementREST({
-            status: 'success',
-            id: Date.now().toString(),
-            title, message, type,
-            createdAt: '__ts__'
+            status:  { stringValue: 'success' },
+            id:      { stringValue: Date.now().toString() },
+            title:   { stringValue: title },
+            message: { stringValue: message },
+            type:    { stringValue: type }
         });
         showToast('Pengumuman berhasil dikirim ke semua pengguna!');
         closeAnnouncementPanel();
@@ -1314,7 +1289,13 @@ async function sendAnnouncement() {
 async function clearAnnouncement() {
     if (!isAdmin()) return;
     try {
-        await _writeAnnouncementREST({ status: 'none', id: '', title: '', message: '', type: 'info' });
+        await _writeAnnouncementREST({
+            status:  { stringValue: 'none' },
+            id:      { stringValue: '' },
+            title:   { stringValue: '' },
+            message: { stringValue: '' },
+            type:    { stringValue: 'info' }
+        });
         showToast('Pengumuman dihapus');
     } catch(e) { showToast('Gagal hapus: ' + e.message); }
 }
