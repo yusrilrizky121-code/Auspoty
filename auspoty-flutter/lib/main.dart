@@ -390,9 +390,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     _stopLocalPlayer(injectJs: false);
 
     try {
-      await _localPlayer.setFilePath(found.path,
-        preloadAudio: true,
-      );
+      await _localPlayer.setFilePath(found.path);
     } catch (e) {
       debugPrint('setFilePath error: $e');
       await c.evaluateJavascript(source:
@@ -1096,13 +1094,10 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     await c.loadUrl(urlRequest: URLRequest(url: WebUri('$_base/')));
                   }
                 }
-                if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty) {
+                if (urlStr.contains('vercel.app') || urlStr.contains('clone2') || urlStr.isEmpty || urlStr.contains(_localHost)) {
                   await _inject(c);
                 }
-                // Inject juga setelah login redirect (userData di URL)
-                if (urlStr.contains('userData=')) {
-                  await _inject(c);
-                }
+                // Inject juga setelah login redirect (userData di URL) — sudah di-handle di atas
               },
               onCreateWindow: (c, action) async {
                 final url = action.request.url?.toString() ?? '';

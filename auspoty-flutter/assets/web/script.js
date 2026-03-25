@@ -198,7 +198,8 @@ function playMusic(videoId, encodedData) {
 // TOGGLE PLAY
 function togglePlay() {
     // Check if playing local offline audio — delegate to Dart just_audio
-    if (window._localAudioPlaying) {
+    // Cek _localAudioPlaying ATAU _isDownloadedView (saat pause, _localAudioPlaying bisa false)
+    if (window._localAudioPlaying || (window._isDownloadedView && window.currentTrack && window.currentTrack.videoId)) {
         if (window.flutter_inappwebview) {
             try { window.flutter_inappwebview.callHandler('toggleLocalPlay'); } catch(e) {}
         }
