@@ -6,7 +6,7 @@
 
 **Aplikasi streaming musik gratis berbasis YouTube Music**
 
-[![Version](https://img.shields.io/badge/version-8.1.0-a78bfa?style=flat-square)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
+[![Version](https://img.shields.io/badge/version-8.3.0-a78bfa?style=flat-square)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Android-green?style=flat-square&logo=android)](https://github.com/yusrilrizky121-code/Auspoty/releases/latest)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 

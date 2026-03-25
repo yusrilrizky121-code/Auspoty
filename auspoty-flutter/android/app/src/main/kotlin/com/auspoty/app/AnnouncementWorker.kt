@@ -34,7 +34,7 @@ class AnnouncementWorker(
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
             Log.d(TAG, "Checking announcements...")
-            val json = fetchAnnouncement() ?: return@withContext Result.success()
+            val json = fetchAnnouncement() ?: return@withContext Result.retry() // retry jika network gagal
 
             val status  = json.optString("status", "none")
             if (status != "success") return@withContext Result.success()
@@ -46,14 +46,21 @@ class AnnouncementWorker(
 
             if (message.isEmpty() && title.isEmpty()) return@withContext Result.success()
 
-            // Cek apakah sudah pernah ditampilkan
+            // Cek apakah sudah pernah ditampilkan (cek kedua prefs)
             val prefs   = ctx.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val annKey  = if (id.isNotEmpty()) id else "$title|$message"
             val lastId  = prefs.getString(KEY_LAST_ID, "") ?: ""
-            if (lastId == annKey) return@withContext Result.success()
+            // Juga cek Flutter SharedPreferences (ditulis oleh Dart saat app terbuka)
+            val flutterPrefs = ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+            val flutterLastId = flutterPrefs.getString("flutter.lastAnnouncementId", "") ?: ""
+            if (lastId == annKey || flutterLastId == annKey) return@withContext Result.success()
 
             // Simpan id agar tidak muncul lagi
             prefs.edit().putString(KEY_LAST_ID, annKey).apply()
+            // Juga tulis ke default SharedPreferences (dipakai oleh Dart/Flutter)
+            // agar Dart tidak menganggap ini pengumuman baru
+            ctx.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+                .edit().putString("flutter.lastAnnouncementId", annKey).apply()
 
             // Tampilkan notifikasi — judul selalu "Admin", isi = pesan dari email
             showNotification("Admin", message.ifEmpty { title }, type)
@@ -75,7 +82,7 @@ class AnnouncementWorker(
             JSONObject(body)
         } catch (e: Exception) {
             Log.e(TAG, "Fetch error: ${e.message}")
-            null
+            null // null = retry akan ditangani oleh caller
         }
     }
 

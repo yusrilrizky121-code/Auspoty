@@ -2,7 +2,7 @@ name: auspoty
 description: Auspoty - Music Streaming App
 publish_to: 'none'
 
-version: 8.1.0+14
+version: 8.3.0+16
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -17,7 +17,7 @@ dependencies:
   url_launcher: ^6.2.6
   http: ^1.2.1
   just_audio: ^0.9.40
-  workmanager: ^0.5.2
+  workmanager: ^0.6.0
   image_picker: ^1.1.2
   open_filex: ^4.3.4
 

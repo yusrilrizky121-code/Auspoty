@@ -1292,5 +1292,5 @@ async function clearAnnouncement() {
 function updateAdminUI() {
     const btn = document.getElementById('adminAnnouncementBtn');
     if (!btn) return;
-    btn.style.display = isAdmin() ? 'flex' : 'none';
+    btn.style.display = isAdmin() ? 'block' : 'none';
 }

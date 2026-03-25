@@ -17,67 +17,16 @@ const _ch = MethodChannel('com.auspoty.app/music');
 final _keepAlive = InAppWebViewKeepAlive();
 const _base = 'https://clone2-git-master-yusrilrizky121-codes-projects.vercel.app';
 
+// (unused legacy constants — kept for reference)
+const _localHost = 'localfile.internal';
+final Map<String, String> _localFileMap = {};
+
 // Versi app saat ini — harus sama dengan versionName di build.gradle
-const _appVersion = '8.1.0';
+const _appVersion = '8.4.0';
 const _githubReleasesApi = 'https://api.github.com/repos/yusrilrizky121-code/Auspoty/releases/latest';
-
-// Local file server for WebView audio
-HttpServer? _fileServer;
-String? _servedFilePath;
-int _fileServerPort = 8765;
-
-Future<void> _startFileServer() async {
-  if (_fileServer != null) return;
-  // Coba beberapa port kalau 8765 sudah dipakai
-  for (final port in [8765, 8766, 8767, 8768]) {
-    try {
-      _fileServer = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
-      _fileServerPort = port;
-      _fileServer!.listen((req) async {
-        if (req.method == 'OPTIONS') {
-          req.response.headers.set('Access-Control-Allow-Origin', '*');
-          req.response.statusCode = 200;
-          await req.response.close();
-          return;
-        }
-        final path = _servedFilePath;
-        if (path == null) { req.response.statusCode = 404; await req.response.close(); return; }
-        final f = File(path);
-        if (!await f.exists()) { req.response.statusCode = 404; await req.response.close(); return; }
-        final ext  = path.split('.').last.toLowerCase();
-        final mime = ext == 'webm' ? 'audio/webm' : ext == 'mp3' ? 'audio/mpeg' : 'audio/mp4';
-        final bytes = await f.readAsBytes();
-        final total = bytes.length;
-        req.response.headers.set('Content-Type', mime);
-        req.response.headers.set('Accept-Ranges', 'bytes');
-        req.response.headers.set('Access-Control-Allow-Origin', '*');
-        req.response.headers.set('Cache-Control', 'no-cache');
-        final rangeHeader = req.headers.value('range');
-        if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
-          final parts = rangeHeader.substring(6).split('-');
-          final start = int.tryParse(parts[0]) ?? 0;
-          final end   = (parts.length > 1 && parts[1].isNotEmpty)
-              ? (int.tryParse(parts[1]) ?? (total - 1)) : (total - 1);
-          final chunk = bytes.sublist(start, end + 1);
-          req.response.statusCode = 206;
-          req.response.headers.set('Content-Range', 'bytes $start-$end/$total');
-          req.response.headers.set('Content-Length', chunk.length.toString());
-          req.response.add(chunk);
-        } else {
-          req.response.statusCode = 200;
-          req.response.headers.set('Content-Length', total.toString());
-          req.response.add(bytes);
-        }
-        await req.response.close();
-      });
-      break; // berhasil bind
-    } catch (_) { _fileServer = null; }
-  }
-}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await _startFileServer();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -118,6 +67,12 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   DateTime? _lastBack;
   Timer? _progressTimer;
 
+  // just_audio player untuk playback file lokal (offline)
+  final AudioPlayer _localPlayer = AudioPlayer();
+  bool _localPlaying = false;
+  Timer? _localProgressTimer;
+  StreamSubscription? _localPlayerSub;
+
   @override
   void initState() {
     super.initState();
@@ -129,6 +84,9 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _progressTimer?.cancel();
+    _localProgressTimer?.cancel();
+    _localPlayerSub?.cancel();
+    _localPlayer.dispose();
     super.dispose();
   }
 
@@ -171,10 +129,28 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
   Future<dynamic> _onNativeCall(MethodCall call) async {
     switch (call.method) {
       case 'onPlayPause':
-        await _wvc?.evaluateJavascript(
-            source: "(function(){ if(typeof togglePlay==='function') togglePlay(); })();");
+        if (_localPlaying || _localPlayer.processingState != ProcessingState.idle) {
+          // Offline: toggle via just_audio
+          if (_localPlayer.playing) {
+            await _localPlayer.pause();
+            _localPlaying = false;
+            try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
+            await _wvc?.evaluateJavascript(source:
+              "(function(){isPlaying=false;window._localAudioPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+          } else {
+            await _localPlayer.play();
+            _localPlaying = true;
+            try { await _ch.invokeMethod('setPlaying', {'isPlaying': true}); } catch (_) {}
+            await _wvc?.evaluateJavascript(source:
+              "(function(){isPlaying=true;window._localAudioPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(true);if(typeof _setArtPlaying==='function')_setArtPlaying(true);})();");
+          }
+        } else {
+          await _wvc?.evaluateJavascript(
+              source: "(function(){ if(typeof togglePlay==='function') togglePlay(); })();");
+        }
         break;
       case 'onNext':
+        _stopLocalPlayer();
         await _wvc?.evaluateJavascript(
             source: "if(typeof playNextSimilarSong==='function') playNextSimilarSong();");
         break;
@@ -334,7 +310,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     try {
       final result = await OpenFilex.open(path, type: 'application/vnd.android.package-archive');
       if (result.type != ResultType.done) {
-        // Fallback ke browser jika open_filex gagal
         await launchUrl(
           Uri.parse('https://github.com/yusrilrizky121-code/Auspoty/releases/latest'),
           mode: LaunchMode.externalApplication,
@@ -346,6 +321,164 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         mode: LaunchMode.externalApplication,
       );
     }
+  }
+
+  // ── Playback file lokal via just_audio (native) ─────────────────────────────
+  void _stopLocalPlayer() {
+    _localPlaying = false;
+    _localProgressTimer?.cancel();
+    _localProgressTimer = null;
+    _localPlayerSub?.cancel();
+    _localPlayerSub = null;
+    try { _localPlayer.stop(); } catch (_) {}
+    _wvc?.evaluateJavascript(source:
+      "(function(){window._localAudioPlaying=false;isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+  }
+
+  Future<void> _playLocalFileDart(
+    InAppWebViewController c,
+    String videoId, String title, String artist, String img,
+  ) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    File? found;
+
+    if (videoId.isNotEmpty) {
+      // 1. SharedPreferences
+      try {
+        final prefs   = await SharedPreferences.getInstance();
+        final mapJson = prefs.getString('downloadedFiles') ?? '{}';
+        final fileMap = Map<String, dynamic>.from(json.decode(mapJson));
+        if (fileMap.containsKey(videoId)) {
+          final info      = fileMap[videoId] as Map<String, dynamic>;
+          final savedPath = info['path']?.toString() ?? '';
+          final fn        = info['filename']?.toString() ?? videoId;
+          final ex        = info['ext']?.toString() ?? 'mp3';
+          for (final candidate in [
+            if (savedPath.isNotEmpty) File(savedPath),
+            File('${appDir.path}/$fn.$ex'),
+            File('${appDir.path}/$videoId.$ex'),
+          ]) {
+            if (await candidate.exists()) { found = candidate; break; }
+          }
+        }
+      } catch (_) {}
+
+      if (found == null) {
+        for (final ext in ['mp3', 'mp4', 'm4a', 'webm', 'opus']) {
+          final f = File('${appDir.path}/$videoId.$ext');
+          if (await f.exists()) { found = f; break; }
+        }
+      }
+
+      if (found == null) {
+        try {
+          for (final f in Directory(appDir.path).listSync().whereType<File>()) {
+            if (f.path.contains(videoId)) { found = f; break; }
+          }
+        } catch (_) {}
+      }
+    }
+
+    if (found == null) {
+      await c.evaluateJavascript(source:
+        "if(typeof showToast==='function') showToast('File tidak ditemukan, unduh dulu');");
+      return;
+    }
+
+    _stopLocalPlayer();
+
+    try {
+      await _localPlayer.setFilePath(found.path);
+    } catch (e) {
+      debugPrint('setFilePath error: $e');
+      await c.evaluateJavascript(source:
+        "if(typeof showToast==='function') showToast('Format audio tidak didukung');");
+      return;
+    }
+    await _localPlayer.play();
+    _localPlaying = true;
+
+    WakelockPlus.enable();
+    try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true, 'imgUrl': img}); } catch (_) {}
+
+    final safeTitle  = title.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+    final safeArtist = artist.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+    final safeImg    = img.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+    final safeVid    = videoId.replaceAll('\\', '\\\\').replaceAll("'", "\\'");
+
+    await c.evaluateJavascript(source: """
+      (function(){
+        try{if(typeof ytPlayer!=='undefined'&&ytPlayer&&ytPlayer.stopVideo)ytPlayer.stopVideo();}catch(e){}
+        window._localAudioPlaying = true;
+        isPlaying = true;
+        window.currentTrack = {videoId:'$safeVid',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
+        if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(true);
+        if(typeof _setArtPlaying==='function') _setArtPlaying(true);
+        var mp=document.getElementById('miniPlayer');if(mp)mp.style.display='flex';
+        var mpi=document.getElementById('miniPlayerImg');if(mpi)mpi.src='$safeImg';
+        var mpt=document.getElementById('miniPlayerTitle');if(mpt)mpt.innerText='$safeTitle';
+        var mpa=document.getElementById('miniPlayerArtist');if(mpa)mpa.innerText='$safeArtist';
+        var pa=document.getElementById('playerArt');if(pa)pa.src='$safeImg';
+        var pt=document.getElementById('playerTitle');if(pt)pt.innerText='$safeTitle';
+        var par=document.getElementById('playerArtist');if(par)par.innerText='$safeArtist';
+        var pbg=document.getElementById('playerBg');if(pbg)pbg.style.backgroundImage="url('$safeImg')";
+        var bar=document.getElementById('progressBar');if(bar)bar.value=0;
+        var pf=document.getElementById('progressFill');if(pf)pf.style.width='0%';
+        var mf=document.getElementById('miniProgressFill');if(mf)mf.style.width='0%';
+        var ct=document.getElementById('currentTime');if(ct)ct.innerText='0:00';
+        var tt=document.getElementById('totalTime');if(tt)tt.innerText='0:00';
+      })();
+    """);
+
+    // Progress timer dari Dart → inject ke WebView setiap 500ms
+    _localProgressTimer = Timer.periodic(const Duration(milliseconds: 500), (_) async {
+      if (!_localPlaying) return;
+      final pos = _localPlayer.position.inMilliseconds;
+      final dur = _localPlayer.duration?.inMilliseconds ?? 0;
+      if (dur <= 0) return;
+      final pct = (pos / dur * 100).clamp(0.0, 100.0);
+      final posSec = pos ~/ 1000;
+      final durSec = dur ~/ 1000;
+      String fmt(int s) => '${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+      try {
+        await _wvc?.evaluateJavascript(source: """
+          (function(){
+            if(!window._localAudioPlaying) return;
+            var pct=${pct.toStringAsFixed(1)};
+            var bar=document.getElementById('progressBar');
+            if(bar){bar.value=pct;bar.style.background='linear-gradient(to right,white '+pct+'%,rgba(255,255,255,0.2) '+pct+'%)';}
+            var pf=document.getElementById('progressFill');if(pf)pf.style.width=pct+'%';
+            var mf=document.getElementById('miniProgressFill');if(mf)mf.style.width=pct+'%';
+            var ct=document.getElementById('currentTime');if(ct)ct.innerText='${fmt(posSec)}';
+            var tt=document.getElementById('totalTime');if(tt)tt.innerText='${fmt(durSec)}';
+          })();
+        """);
+      } catch (_) {}
+    });
+
+    // Selesai putar
+    _localPlayerSub?.cancel();
+    _localPlayerSub = _localPlayer.playerStateStream.listen((state) async {
+      if (state.processingState == ProcessingState.completed) {
+        _localPlaying = false;
+        _localProgressTimer?.cancel();
+        try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
+        try {
+          await _wvc?.evaluateJavascript(source: """
+            (function(){
+              isPlaying=false; window._localAudioPlaying=false;
+              if(typeof updatePlayPauseBtn==='function') updatePlayPauseBtn(false);
+              if(typeof _setArtPlaying==='function') _setArtPlaying(false);
+              if(typeof isRepeat!=='undefined'&&isRepeat){
+                window.flutter_inappwebview.callHandler('playLocalFile','$safeTitle','$safeArtist','$safeImg','$safeVid');
+              } else {
+                if(typeof playNextSimilarSong==='function') playNextSimilarSong();
+              }
+            })();
+          """);
+        } catch (_) {}
+      }
+    });
   }
 
   // Cek pengumuman dari server saat app load
@@ -361,7 +494,6 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         final id      = data['id']?.toString() ?? '';
         final title   = data['title']?.toString() ?? 'Auspoty';
         final message = data['message']?.toString() ?? '';
-        final type    = data['type']?.toString() ?? 'info';
         // Gunakan id atau fallback ke hash title+message
         final annKey = id.isNotEmpty ? id : '$title|$message';
         if (annKey.isEmpty || (title.isEmpty && message.isEmpty)) return;
@@ -370,14 +502,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
         final shown = prefs.getString('lastAnnouncementId') ?? '';
         if (shown == annKey) return;
         await prefs.setString('lastAnnouncementId', annKey);
-        // Kirim notifikasi via native service (hanya status bar, tanpa toast)
-        try {
-          await _ch.invokeMethod('sendAnnouncement', {
-            'title': title.isNotEmpty ? title : 'Auspoty',
-            'message': message.isNotEmpty ? message : title,
-            'type': type,
-          });
-        } catch (_) {}
+        // Hanya tandai sebagai sudah dilihat — AnnouncementWorker yang handle notifikasi status bar
+        // Ini mencegah notifikasi ganda (Worker + Dart keduanya kirim notif)
       }
     } catch (_) {}
   }
@@ -535,48 +661,101 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     final mapJson = prefs.getString('downloadedFiles') ?? '{}';
     final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
     if (!mounted) return;
-    if (fileMap.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Belum ada lagu diunduh'),
-        duration: Duration(seconds: 2),
-        behavior: SnackBarBehavior.floating,
-      ));
-      return;
-    }
+
     final appDir = await getApplicationDocumentsDirectory();
     final songs = <Map<String, dynamic>>[];
-    for (final entry in fileMap.entries) {
-      final videoId = entry.key;
-      final val = entry.value;
-      if (val is! Map) continue;
-      // Verifikasi file benar-benar ada
-      final fn  = val['filename']?.toString() ?? videoId;
-      final ext = val['ext']?.toString() ?? 'mp3';
-      // Coba path tersimpan dulu, lalu fallback ke appDir
-      String? filePath;
-      final savedPath = val['path']?.toString() ?? '';
-      if (savedPath.isNotEmpty && await File(savedPath).exists()) {
-        filePath = savedPath;
-      } else {
-        final f = File('${appDir.path}/$fn.$ext');
-        if (await f.exists()) filePath = f.path;
-        // Fallback: cari dengan videoId sebagai nama file
-        if (filePath == null) {
-          final f2 = File('${appDir.path}/$videoId.$ext');
-          if (await f2.exists()) filePath = f2.path;
+
+    // Jika SharedPreferences kosong, coba scan langsung dari appDir
+    if (fileMap.isEmpty) {
+      try {
+        final dir = Directory(appDir.path);
+        final files = dir.listSync().whereType<File>().where((f) {
+          final name = f.path.split('/').last.toLowerCase();
+          return name.endsWith('.mp3') || name.endsWith('.mp4') ||
+                 name.endsWith('.webm') || name.endsWith('.m4a');
+        }).toList();
+        if (files.isEmpty) {
+          if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Belum ada lagu diunduh'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ));
+          return;
         }
+        for (final f in files) {
+          final name = f.path.split('/').last;
+          final ext  = name.split('.').last;
+          final vid  = name.replaceAll('.$ext', '');
+          songs.add({
+            'videoId': vid, 'title': vid, 'artist': '', 'img': '',
+            'filename': vid, 'ext': ext, 'path': f.path,
+          });
+        }
+      } catch (_) {}
+    } else {
+      for (final entry in fileMap.entries) {
+        final videoId = entry.key;
+        final val = entry.value;
+        if (val is! Map) continue;
+        final fn  = val['filename']?.toString() ?? videoId;
+        final ext = val['ext']?.toString() ?? 'mp3';
+
+        // Cari file dengan urutan prioritas
+        String? filePath;
+        final savedPath = val['path']?.toString() ?? '';
+
+        // 1. Path tersimpan langsung
+        if (savedPath.isNotEmpty && await File(savedPath).exists()) {
+          filePath = savedPath;
+        }
+        // 2. appDir + filename.ext
+        if (filePath == null) {
+          final f = File('${appDir.path}/$fn.$ext');
+          if (await f.exists()) filePath = f.path;
+        }
+        // 3. appDir + videoId.ext
+        if (filePath == null) {
+          final f = File('${appDir.path}/$videoId.$ext');
+          if (await f.exists()) filePath = f.path;
+        }
+        // 4. Coba semua ekstensi umum
+        if (filePath == null) {
+          for (final e in ['mp3', 'mp4', 'webm', 'm4a']) {
+            final f = File('${appDir.path}/$videoId.$e');
+            if (await f.exists()) { filePath = f.path; break; }
+          }
+        }
+        // 5. Scan seluruh appDir cari file yang namanya mengandung videoId
+        if (filePath == null) {
+          try {
+            final dir = Directory(appDir.path);
+            for (final f in dir.listSync().whereType<File>()) {
+              if (f.path.contains(videoId)) { filePath = f.path; break; }
+            }
+          } catch (_) {}
+        }
+
+        if (filePath == null) continue; // benar-benar tidak ada
+
+        // Update path di prefs jika berubah
+        if (filePath != savedPath) {
+          fileMap[videoId] = Map<String, dynamic>.from(val)..['path'] = filePath;
+        }
+
+        songs.add({
+          'videoId':  videoId,
+          'title':    val['title']?.toString()  ?? 'Unknown',
+          'artist':   val['artist']?.toString() ?? '',
+          'img':      val['img']?.toString()    ?? '',
+          'filename': fn,
+          'ext':      filePath.split('.').last,
+          'path':     filePath,
+        });
       }
-      if (filePath == null) continue; // skip file yang tidak ada
-      songs.add({
-        'videoId':  videoId,
-        'title':    val['title']?.toString()    ?? 'Unknown',
-        'artist':   val['artist']?.toString()   ?? '',
-        'img':      val['img']?.toString()      ?? '',
-        'filename': fn,
-        'ext':      ext,
-        'path':     filePath,
-      });
+      // Simpan path yang sudah diupdate
+      await prefs.setString('downloadedFiles', json.encode(fileMap));
     }
+
     if (!mounted) return;
     if (songs.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -595,57 +774,59 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
     );
   }
 
-  // Dipanggil dari _OfflinePlayerSheet — hanya dipakai saat ONLINE (WebView aktif)
-  // Saat offline, _OfflinePlayerSheet langsung pakai just_audio sendiri
+  // Dipanggil dari _OfflinePlayerSheet
   Future<void> _playOfflineSong(Map<String, dynamic> song) async {
-    if (_isOffline) return; // offline: biarkan just_audio di sheet yang handle
-    final appDir = await getApplicationDocumentsDirectory();
-    final fn  = song['filename'] as String;
-    final ext = song['ext'] as String;
-    // Coba path tersimpan dulu
-    final savedPath = song['path'] as String? ?? '';
-    File? f;
-    if (savedPath.isNotEmpty && await File(savedPath).exists()) {
-      f = File(savedPath);
+    final title  = song['title']   as String? ?? '';
+    final artist = song['artist']  as String? ?? '';
+    final img    = song['img']     as String? ?? '';
+    final vid    = song['videoId'] as String? ?? '';
+    // Gunakan _playLocalFileDart — handle audio via just_audio
+    // Jika offline (_wvc tidak bisa inject JS), tetap play audio saja
+    if (_wvc != null) {
+      await _playLocalFileDart(_wvc!, vid, title, artist, img);
     } else {
-      final candidate = File('${appDir.path}/$fn.$ext');
-      if (await candidate.exists()) f = candidate;
+      // Fallback: play audio langsung tanpa WebView UI update
+      await _playAudioOnly(vid, title, artist, img);
     }
-    if (f == null) return;
-    final title  = song['title']  as String;
-    final artist = song['artist'] as String;
-    final img    = song['img']    as String;
-    final vid    = song['videoId'] as String;
-    try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true, 'imgUrl': img}); } catch (_) {}
-    _servedFilePath = f.path;
-    if (_fileServer == null) await _startFileServer();
-    final localUrl = 'http://127.0.0.1:$_fileServerPort/audio.$ext';
-    final safeTitle  = title.replaceAll("'", "\\'").replaceAll('"', '\\"');
-    final safeArtist = artist.replaceAll("'", "\\'").replaceAll('"', '\\"');
-    final safeImg    = img.replaceAll("'", "\\'");
-    final safeVid    = vid.replaceAll("'", "\\'");
-    await _wvc?.evaluateJavascript(source: """
-      (function(){
-        try { if(typeof ytPlayer!=='undefined'&&ytPlayer&&ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e){}
-        window._localAudioPlaying=true;
-        isPlaying=false;
-        window.currentTrack={videoId:'$safeVid',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
-        var au=document.getElementById('bgAudio');
-        if(!au){au=document.createElement('audio');au.id='bgAudio';au.style.display='none';document.body.appendChild(au);}
-        au.onplay=null;au.onpause=null;au.onended=null;au.onerror=null;
-        au.src='$localUrl';
-        au.onplay=function(){isPlaying=true;updatePlayPauseBtn(true);_setArtPlaying(true);startProgressBar();};
-        au.onpause=function(){isPlaying=false;updatePlayPauseBtn(false);_setArtPlaying(false);};
-        au.onerror=function(){if(typeof showToast==='function')showToast('Gagal putar audio offline');window._localAudioPlaying=false;};
-        au.onended=function(){isPlaying=false;window._localAudioPlaying=false;updatePlayPauseBtn(false);stopProgressBar();if(isRepeat){au.currentTime=0;au.play();}else playNextSimilarSong();};
-        au.load();
-        au.play().catch(function(e){console.log('offline play err',e);});
-        var mp=document.getElementById('miniPlayer');if(mp)mp.style.display='flex';
-        var mpi=document.getElementById('miniPlayerImg');if(mpi)mpi.src='$safeImg';
-        var mpt=document.getElementById('miniPlayerTitle');if(mpt)mpt.innerText='$safeTitle';
-        var mpa=document.getElementById('miniPlayerArtist');if(mpa)mpa.innerText='$safeArtist';
-      })();
-    """);
+  }
+
+  Future<void> _playAudioOnly(String videoId, String title, String artist, String img) async {
+    final appDir = await getApplicationDocumentsDirectory();
+    File? found;
+    try {
+      final prefs   = await SharedPreferences.getInstance();
+      final mapJson = prefs.getString('downloadedFiles') ?? '{}';
+      final fileMap = Map<String, dynamic>.from(json.decode(mapJson));
+      if (fileMap.containsKey(videoId)) {
+        final info      = fileMap[videoId] as Map<String, dynamic>;
+        final savedPath = info['path']?.toString() ?? '';
+        final fn        = info['filename']?.toString() ?? videoId;
+        final ex        = info['ext']?.toString() ?? 'mp3';
+        for (final candidate in [
+          if (savedPath.isNotEmpty) File(savedPath),
+          File('${appDir.path}/$fn.$ex'),
+          File('${appDir.path}/$videoId.$ex'),
+        ]) {
+          if (await candidate.exists()) { found = candidate; break; }
+        }
+      }
+    } catch (_) {}
+    if (found == null) {
+      for (final ext in ['mp3', 'mp4', 'm4a', 'webm']) {
+        final f = File('${appDir.path}/$videoId.$ext');
+        if (await f.exists()) { found = f; break; }
+      }
+    }
+    if (found == null) return;
+    _stopLocalPlayer();
+    try {
+      await _localPlayer.setFilePath(found.path);
+      await _localPlayer.play();
+      WakelockPlus.enable();
+      try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true, 'imgUrl': img}); } catch (_) {}
+    } catch (e) {
+      debugPrint('_playAudioOnly error: $e');
+    }
   }
 
   @override
@@ -674,8 +855,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 allowsInlineMediaPlayback: true,
                 allowBackgroundAudioPlaying: true,
                 useHybridComposition: false,
-                allowFileAccessFromFileURLs: false,
-                allowUniversalAccessFromFileURLs: false,
+                allowFileAccessFromFileURLs: true,
+                allowUniversalAccessFromFileURLs: true,
                 mixedContentMode: MixedContentMode.MIXED_CONTENT_ALWAYS_ALLOW,
                 useWideViewPort: false,
                 loadWithOverviewMode: false,
@@ -691,6 +872,7 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 overScrollMode: OverScrollMode.NEVER,
                 transparentBackground: false,
                 disabledActionModeMenuItems: ActionModeMenuItem.MENU_ITEM_NONE,
+                useShouldInterceptRequest: true,
                 rendererPriorityPolicy: RendererPriorityPolicy(
                   rendererRequestedPriority: RendererPriority.RENDERER_PRIORITY_IMPORTANT,
                   waivedWhenNotVisible: false,
@@ -705,7 +887,8 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     final title  = args.isNotEmpty ? args[0].toString() : 'Auspoty';
                     final artist = args.length > 1 ? args[1].toString() : '';
                     final imgUrl = args.length > 3 ? args[3].toString() : '';
-                    // Stop bgAudio (offline) dulu sebelum ytPlayer jalan
+                    // Stop local just_audio player jika sedang putar offline
+                    _stopLocalPlayer();
                     await c.evaluateJavascript(source: """
                       (function(){
                         var au = document.getElementById('bgAudio');
@@ -760,103 +943,42 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                     final artist  = args.length > 1 ? args[1].toString() : '';
                     final img     = args.length > 2 ? args[2].toString() : '';
                     final videoId = args.length > 3 ? args[3].toString() : '';
-                    try {
-                      // Stop ytPlayer dulu agar tidak bentrok dengan bgAudio
-                      await c.evaluateJavascript(source: """
-                        (function(){
-                          try { if(typeof ytPlayer!=='undefined'&&ytPlayer&&ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e){}
-                          window._localAudioPlaying = false;
-                          isPlaying = false;
-                        })();
-                      """);
-                      // Pastikan file server jalan
-                      if (_fileServer == null) await _startFileServer();
-
-                      final appDir = await getApplicationDocumentsDirectory();
-                      File? found; String? foundExt;
-
-                      // Cari berdasarkan videoId di SharedPreferences (paling akurat)
-                      if (videoId.isNotEmpty) {
-                        final prefs   = await SharedPreferences.getInstance();
-                        final mapJson = prefs.getString('downloadedFiles') ?? '{}';
-                        final Map<String, dynamic> fileMap = Map<String, dynamic>.from(json.decode(mapJson));
-                        if (fileMap.containsKey(videoId)) {
-                          final info = fileMap[videoId] as Map<String, dynamic>;
-                          // Coba path langsung dulu
-                          final savedPath = info['path']?.toString() ?? '';
-                          if (savedPath.isNotEmpty) {
-                            final fp = File(savedPath);
-                            if (await fp.exists()) { found = fp; foundExt = info['ext']?.toString() ?? 'mp3'; }
-                          }
-                          // Fallback: cari berdasarkan filename di appDir
-                          if (found == null) {
-                            final fn = info['filename']?.toString() ?? '';
-                            final ex = info['ext']?.toString() ?? 'mp3';
-                            if (fn.isNotEmpty) {
-                              final f = File('${appDir.path}/$fn.$ex');
-                              if (await f.exists()) { found = f; foundExt = ex; }
-                            }
-                          }
-                        }
-                        // Fallback: cari file dengan nama = videoId di appDir
-                        if (found == null) {
-                          for (final ext in ['mp3', 'mp4', 'webm', 'm4a']) {
-                            final f = File('${appDir.path}/$videoId.$ext');
-                            if (await f.exists()) { found = f; foundExt = ext; break; }
-                          }
-                        }
-                      }
-
-                      if (found == null) {
-                        await c.evaluateJavascript(source:
-                          "if(typeof showToast==='function') showToast('File tidak ditemukan, unduh dulu');");
-                        return;
-                      }
-
-                      try { await _ch.invokeMethod('updateTrack', {'title': title, 'artist': artist, 'isPlaying': true, 'imgUrl': img}); } catch (_) {}
-                      _servedFilePath = found.path;
-                      final localUrl = 'http://127.0.0.1:$_fileServerPort/audio.$foundExt';
-                      WakelockPlus.enable();
-                      final safeTitle  = title.replaceAll("'", "\\'").replaceAll('"', '\\"');
-                      final safeArtist = artist.replaceAll("'", "\\'").replaceAll('"', '\\"');
-                      final safeImg    = img.replaceAll("'", "\\'");
-                      final safeVid    = videoId.replaceAll("'", "\\'");
-                      await c.evaluateJavascript(source: """
-                        (function(){
-                          try { if(typeof ytPlayer!=='undefined'&&ytPlayer&&ytPlayer.stopVideo) ytPlayer.stopVideo(); } catch(e){}
-                          window._localAudioPlaying = true;
-                          isPlaying = false;
-                          window.currentTrack={videoId:'$safeVid',title:'$safeTitle',artist:'$safeArtist',img:'$safeImg'};
-                          var au=document.getElementById('bgAudio');
-                          if(!au){au=document.createElement('audio');au.id='bgAudio';au.style.display='none';document.body.appendChild(au);}
-                          au.onplay=null;au.onpause=null;au.onended=null;au.onerror=null;
-                          au.src='$localUrl';
-                          au.onplay=function(){isPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(true);if(typeof _setArtPlaying==='function')_setArtPlaying(true);if(typeof startProgressBar==='function')startProgressBar();if(window.flutter_inappwebview)try{window.flutter_inappwebview.callHandler('onMusicPlaying','$safeTitle','$safeArtist','','$safeImg');}catch(e){}};
-                          au.onpause=function(){isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);};
-                          au.onerror=function(){console.log('audio error',au.error&&au.error.code);if(typeof showToast==='function')showToast('Gagal putar audio offline');window._localAudioPlaying=false;};
-                          au.onended=function(){isPlaying=false;window._localAudioPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);if(typeof stopProgressBar==='function')stopProgressBar();if(typeof isRepeat!=='undefined'&&isRepeat){au.currentTime=0;au.play();}else if(typeof playNextSimilarSong==='function')playNextSimilarSong();};
-                          au.load();
-                          au.play().catch(function(e){console.log('local play err',e);if(typeof showToast==='function')showToast('Gagal putar: '+e.message);});
-                          var mp=document.getElementById('miniPlayer');if(mp)mp.style.display='flex';
-                          var mpi=document.getElementById('miniPlayerImg');if(mpi)mpi.src='$safeImg';
-                          var mpt=document.getElementById('miniPlayerTitle');if(mpt)mpt.innerText='$safeTitle';
-                          var mpa=document.getElementById('miniPlayerArtist');if(mpa)mpa.innerText='$safeArtist';
-                          var pa=document.getElementById('playerArt');if(pa)pa.src='$safeImg';
-                          var pt=document.getElementById('playerTitle');if(pt)pt.innerText='$safeTitle';
-                          var par=document.getElementById('playerArtist');if(par)par.innerText='$safeArtist';
-                          var pbg=document.getElementById('playerBg');if(pbg)pbg.style.backgroundImage="url('$safeImg')";
-                          var bar=document.getElementById('progressBar');if(bar)bar.value=0;
-                          var pf=document.getElementById('progressFill');if(pf)pf.style.width='0%';
-                          var mf=document.getElementById('miniProgressFill');if(mf)mf.style.width='0%';
-                          var ct=document.getElementById('currentTime');if(ct)ct.innerText='0:00';
-                          var tt=document.getElementById('totalTime');if(tt)tt.innerText='0:00';
-                        })();
-                      """);
-                    } catch (e) {
-                      debugPrint('playLocalFile error: $e');
+                    await _playLocalFileDart(c, videoId, title, artist, img);
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'toggleLocalPlay',
+                  callback: (args) async {
+                    if (_localPlayer.playing) {
+                      await _localPlayer.pause();
+                      _localPlaying = false;
+                      try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
                       await c.evaluateJavascript(source:
-                        "if(typeof showToast==='function') showToast('Gagal memutar file offline');");
+                        "(function(){isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+                    } else if (_localPlaying || _localPlayer.processingState != ProcessingState.idle) {
+                      await _localPlayer.play();
+                      _localPlaying = true;
+                      try { await _ch.invokeMethod('setPlaying', {'isPlaying': true}); } catch (_) {}
+                      await c.evaluateJavascript(source:
+                        "(function(){isPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(true);if(typeof _setArtPlaying==='function')_setArtPlaying(true);})();");
                     }
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'seekLocalTo',
+                  callback: (args) async {
+                    final pct = args.isNotEmpty ? (double.tryParse(args[0].toString()) ?? 0.0) : 0.0;
+                    final dur = _localPlayer.duration?.inMilliseconds ?? 0;
+                    if (dur > 0) {
+                      final pos = Duration(milliseconds: (pct / 100 * dur).round());
+                      await _localPlayer.seek(pos);
+                    }
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'stopLocalPlayer',
+                  callback: (args) async {
+                    _stopLocalPlayer();
                   },
                 );
                 c.addJavaScriptHandler(
@@ -867,6 +989,14 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                       final uri = Uri.parse(url);
                       if (await canLaunchUrl(uri)) await launchUrl(uri, mode: LaunchMode.externalApplication);
                     }
+                  },
+                );
+                c.addJavaScriptHandler(
+                  handlerName: 'checkForUpdate',
+                  callback: (args) async {
+                    // Reset flag agar bisa cek ulang meski sudah pernah cek
+                    _updateChecked = false;
+                    await _checkForUpdate();
                   },
                 );
                 c.addJavaScriptHandler(
@@ -967,13 +1097,83 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                 if (req.isForMainFrame == true) {
                   // Halaman utama gagal load = offline
                   setState(() { _loading = false; _isOffline = true; });
-                  if (_fileServer == null) await _startFileServer();
                 }
               },
               onPermissionRequest: (c, req) async =>
                   PermissionResponse(resources: req.resources, action: PermissionResponseAction.GRANT),
+              shouldInterceptRequest: (c, req) async {
+                if (req.url.host == _localHost) {
+                  final path = req.url.path;
+                  final filename = path.split('/').last;
+                  final dotIdx = filename.lastIndexOf('.');
+                  final videoId = dotIdx > 0 ? filename.substring(0, dotIdx) : filename;
+                  final ext = dotIdx > 0 ? filename.substring(dotIdx + 1).toLowerCase() : 'mp3';
+                  final filePath = _localFileMap[videoId];
+                  if (filePath != null) {
+                    try {
+                      final file = File(filePath);
+                      if (await file.exists()) {
+                        final fileSize = await file.length();
+                        final mime = ext == 'mp3' ? 'audio/mpeg'
+                                   : ext == 'webm' ? 'audio/webm'
+                                   : ext == 'opus' ? 'audio/ogg'
+                                   : 'audio/mp4';
+
+                        // Handle Range requests for audio seeking
+                        final rangeHeader = req.headers?['Range'] ?? req.headers?['range'];
+                        if (rangeHeader != null && rangeHeader.startsWith('bytes=')) {
+                          final rangePart = rangeHeader.substring(6);
+                          final parts = rangePart.split('-');
+                          final start = int.tryParse(parts[0]) ?? 0;
+                          final end = parts.length > 1 && parts[1].isNotEmpty
+                              ? (int.tryParse(parts[1]) ?? (fileSize - 1))
+                              : (fileSize - 1);
+                          final length = end - start + 1;
+                          final raf = await file.open();
+                          await raf.setPosition(start);
+                          final chunk = await raf.read(length);
+                          await raf.close();
+                          return WebResourceResponse(
+                            contentType: mime,
+                            data: chunk,
+                            statusCode: 206,
+                            reasonPhrase: 'Partial Content',
+                            headers: {
+                              'Content-Range': 'bytes $start-$end/$fileSize',
+                              'Content-Length': length.toString(),
+                              'Accept-Ranges': 'bytes',
+                              'Access-Control-Allow-Origin': '*',
+                              'Content-Type': mime,
+                            },
+                          );
+                        }
+
+                        // Full file response
+                        final bytes = await file.readAsBytes();
+                        return WebResourceResponse(
+                          contentType: mime,
+                          data: bytes,
+                          statusCode: 200,
+                          reasonPhrase: 'OK',
+                          headers: {
+                            'Content-Length': fileSize.toString(),
+                            'Accept-Ranges': 'bytes',
+                            'Access-Control-Allow-Origin': '*',
+                            'Content-Type': mime,
+                          },
+                        );
+                      }
+                    } catch (e) {
+                      debugPrint('shouldInterceptRequest error: $e');
+                    }
+                  }
+                  return WebResourceResponse(statusCode: 404, reasonPhrase: 'Not Found', headers: {});
+                }
+                return null;
+              },
               shouldOverrideUrlLoading: (c, nav) async {
                 final url = nav.request.url?.toString() ?? '';
+                if (nav.request.url?.host == _localHost) return NavigationActionPolicy.ALLOW;
                 const ok = ['vercel.app','youtube.com','ytimg.com','googleapis.com',
                   'gstatic.com','firebaseapp.com','firebase.google.com',
                   'accounts.google.com','google.com','googleusercontent.com',
@@ -1167,43 +1367,19 @@ class _OfflinePlayerSheet extends StatefulWidget {
 
 class _OfflinePlayerSheetState extends State<_OfflinePlayerSheet> {
   String? _playingId;
-  final AudioPlayer _player = AudioPlayer();
   Map<String, dynamic>? _currentSong;
 
   @override
   void dispose() {
-    _player.dispose();
     super.dispose();
   }
 
   Future<void> _play(Map<String, dynamic> song) async {
-    setState(() { _playingId = song['videoId'] as String; _currentSong = song; });
-    try {
-      // Gunakan path langsung jika tersedia (sudah diverifikasi di _openOfflinePlayer)
-      final filePath = song['path'] as String? ?? '';
-      if (filePath.isNotEmpty && await File(filePath).exists()) {
-        await _player.stop();
-        await _player.setFilePath(filePath);
-        await _player.play();
-      } else {
-        // Fallback: cari di appDir
-        final appDir = await getApplicationDocumentsDirectory();
-        final fn  = song['filename'] as String;
-        final ext = song['ext'] as String;
-        final f   = File('${appDir.path}/$fn.$ext');
-        if (await f.exists()) {
-          await _player.stop();
-          await _player.setFilePath(f.path);
-          await _player.play();
-        } else {
-          debugPrint('File tidak ditemukan: $filePath');
-          return;
-        }
-      }
-    } catch (e) {
-      debugPrint('just_audio error: $e');
-    }
-    // Update WebView UI jika online (tidak masalah jika gagal saat offline)
+    setState(() {
+      _playingId = song['videoId'] as String;
+      _currentSong = song;
+    });
+    // Delegasikan ke parent — _playLocalFileDart yang handle audio + UI
     await widget.onPlay(song);
   }
 
@@ -1235,42 +1411,32 @@ class _OfflinePlayerSheetState extends State<_OfflinePlayerSheet> {
           ),
           // Mini player bar saat ada lagu yang diputar
           if (_currentSong != null)
-            StreamBuilder<PlayerState>(
-              stream: _player.playerStateStream,
-              builder: (_, snap) {
-                final playing = snap.data?.playing ?? false;
-                return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF2d2d4e),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: (_currentSong!['img'] as String).isNotEmpty
-                        ? Image.network(_currentSong!['img'] as String, width: 36, height: 36, fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _artIcon(36))
-                        : _artIcon(36),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(_currentSong!['title'] as String,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                      Text(_currentSong!['artist'] as String,
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white54, fontSize: 11)),
-                    ])),
-                    IconButton(
-                      icon: Icon(playing ? Icons.pause_circle : Icons.play_circle,
-                        color: const Color(0xFFa78bfa), size: 32),
-                      onPressed: () => playing ? _player.pause() : _player.play(),
-                    ),
-                  ]),
-                );
-              },
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2d2d4e),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: (_currentSong!['img'] as String).isNotEmpty
+                    ? Image.network(_currentSong!['img'] as String, width: 36, height: 36, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _artIcon(36))
+                    : _artIcon(36),
+                ),
+                const SizedBox(width: 10),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_currentSong!['title'] as String,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                  Text(_currentSong!['artist'] as String,
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                ])),
+                const Icon(Icons.equalizer, color: Color(0xFFa78bfa), size: 24),
+              ]),
             ),
           const Divider(color: Colors.white12, height: 1),
           Expanded(
