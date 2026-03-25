@@ -114,12 +114,16 @@
       });
 
       // Firestore untuk komentar
-      import { getFirestore, collection, addDoc, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
+      import { getFirestore, collection, addDoc, setDoc, updateDoc, arrayUnion, arrayRemove, query, where, orderBy, getDocs, deleteDoc, doc, serverTimestamp }
         from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
       const db_fs = getFirestore(app);
       window._firestoreDB = db_fs;
       window._fsCollection = collection;
       window._fsAddDoc = addDoc;
+      window._fsSetDoc = setDoc;
+      window._fsUpdateDoc = updateDoc;
+      window._fsArrayUnion = arrayUnion;
+      window._fsArrayRemove = arrayRemove;
       window._fsQuery = query;
       window._fsWhere = where;
       window._fsOrderBy = orderBy;
@@ -624,6 +628,7 @@
         <div id="commentTrackName" style="font-size:12px;color:var(--text-sub);margin-bottom:16px;"></div>
         <div id="commentsList" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-bottom:8px;"></div>
         <div id="commentInputArea" style="margin-top:12px;display:none;">
+            <div id="cancelReplyBtn" onclick="_cancelReply()" style="display:none;font-size:12px;color:var(--accent);margin-bottom:6px;cursor:pointer;">✕ Batal balas</div>
             <div style="display:flex;gap:10px;align-items:flex-end;">
                 <textarea id="commentInput" placeholder="Tulis komentar..." style="flex:1;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:10px 14px;color:white;font-size:14px;outline:none;resize:none;height:44px;font-family:inherit;"></textarea>
                 <button onclick="submitComment()" style="background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:12px;padding:10px 16px;color:white;font-weight:700;cursor:pointer;font-size:14px;height:44px;white-space:nowrap;">Kirim</button>

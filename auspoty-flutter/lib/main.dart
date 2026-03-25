@@ -1049,17 +1049,33 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                       final picker = ImagePicker();
                       final picked = await picker.pickImage(
                         source: ImageSource.gallery,
-                        maxWidth: 512,
-                        maxHeight: 512,
-                        imageQuality: 80,
+                        maxWidth: 400,
+                        maxHeight: 400,
+                        imageQuality: 60,
                       );
                       if (picked == null) return;
                       final bytes = await picked.readAsBytes();
-                      final base64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-                      await c.evaluateJavascript(source:
-                        "if(typeof applyProfilePhoto==='function') applyProfilePhoto('$base64');");
+                      final b64 = base64Encode(bytes);
+                      // Simpan ke localStorage langsung via JS tanpa passing string panjang di evaluateJavascript
+                      // Kirim dalam chunk kecil untuk menghindari limit
+                      const chunkSize = 50000;
+                      final total = b64.length;
+                      // Reset dulu
+                      await c.evaluateJavascript(source: "window._b64chunks=[];");
+                      for (var i = 0; i < total; i += chunkSize) {
+                        final end = (i + chunkSize < total) ? i + chunkSize : total;
+                        final chunk = b64.substring(i, end);
+                        await c.evaluateJavascript(source: "window._b64chunks.push('$chunk');");
+                      }
+                      await c.evaluateJavascript(source: """
+                        (function(){
+                          var full = 'data:image/jpeg;base64,' + window._b64chunks.join('');
+                          window._b64chunks = null;
+                          if(typeof applyProfilePhoto==='function') applyProfilePhoto(full);
+                        })();
+                      """);
                     } catch (e) {
-                      debugPrint('pickProfilePhoto error: $e');
+                      debugPrint('pickProfilePhoto error: \$e');
                     }
                   },
                 );

@@ -11,12 +11,13 @@ window.addEventListener('beforeinstallprompt', (e) => {
 
 // INDEXEDDB
 let db;
-const dbReq = indexedDB.open('AuspotyDB', 2);
+const dbReq = indexedDB.open('AuspotyDB', 3);
 dbReq.onupgradeneeded = (e) => {
     db = e.target.result;
     if (!db.objectStoreNames.contains('playlists')) db.createObjectStore('playlists', { keyPath: 'id' });
     if (!db.objectStoreNames.contains('liked_songs')) db.createObjectStore('liked_songs', { keyPath: 'videoId' });
     if (!db.objectStoreNames.contains('downloaded_songs')) db.createObjectStore('downloaded_songs', { keyPath: 'videoId' });
+    if (!db.objectStoreNames.contains('subscribed_songs')) db.createObjectStore('subscribed_songs', { keyPath: 'videoId' });
 };
 dbReq.onsuccess = (e) => { db = e.target.result; renderLibraryUI(); };
 
@@ -220,6 +221,8 @@ function updatePlayPauseBtn(playing) {
     const mainBtn = document.getElementById('mainPlayBtn'), miniBtn = document.getElementById('miniPlayBtn');
     if (mainBtn) mainBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
     if (miniBtn) miniBtn.innerHTML = '<path d="' + (playing ? pausePath : playPath) + '"/>';
+    // Update icon di daftar lagu diunduh
+    if (window._isDownloadedView) _updateDownloadedListIcons();
 }
 
 function expandPlayer() { document.getElementById('playerModal').style.display = 'flex'; }
@@ -576,11 +579,43 @@ function renderDownloadedVItem(t) {
     var art = (t.artist || '').replace(/'/g, "\\'");
     var img = getHighResImage(t.thumbnail || t.img || '');
     var imgEsc = img.replace(/'/g, "\\'");
-    return '<div class="v-item">' +
+    var isPlaying = window.currentTrack && window.currentTrack.videoId === vid && window._localAudioPlaying;
+    var playIcon = isPlaying
+        ? '<svg viewBox="0 0 24 24" style="fill:#a78bfa;width:22px;height:22px;flex-shrink:0;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'
+        : '<svg viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.5);width:22px;height:22px;flex-shrink:0;"><path d="M8 5v14l11-7z"/></svg>';
+    return '<div class="v-item" id="dl-item-' + vid + '">' +
         '<img loading="lazy" class="v-img" src="' + img + '" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')">' +
         '<div class="v-info" onclick="playDownloadedSong(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')"><div class="v-title">' + (t.title || '') + '</div><div class="v-sub">' + (t.artist || '') + '</div></div>' +
+        '<div style="display:flex;align-items:center;gap:8px;">' +
+        '<span class="dl-play-btn" id="dl-play-' + vid + '" onclick="event.stopPropagation();_toggleDownloadedPlay(\'' + vid + '\',\'' + ttl + '\',\'' + art + '\',\'' + imgEsc + '\')">' + playIcon + '</span>' +
         '<svg onclick="deleteDownloadedSong(\'' + vid + '\')" viewBox="0 0 24 24" style="fill:rgba(255,255,255,0.4);width:22px;height:22px;flex-shrink:0;cursor:pointer;"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>' +
-        '</div>';
+        '</div></div>';
+}
+
+// Toggle play/pause untuk item di daftar unduhan
+function _toggleDownloadedPlay(vid, ttl, art, img) {
+    if (window.currentTrack && window.currentTrack.videoId === vid && window._localAudioPlaying) {
+        // Lagu ini sedang aktif — toggle play/pause
+        togglePlay();
+    } else {
+        // Lagu berbeda — play lagu ini
+        playDownloadedSong(vid, ttl, art, img);
+    }
+}
+
+// Update semua icon play di daftar unduhan
+function _updateDownloadedListIcons() {
+    if (!window._playlistTracks || !window._isDownloadedView) return;
+    var playPath = 'M8 5v14l11-7z', pausePath = 'M6 19h4V5H6v14zm8-14v14h4V5h-4z';
+    window._playlistTracks.forEach(function(t) {
+        var el = document.getElementById('dl-play-' + t.videoId);
+        if (!el) return;
+        var isActive = window.currentTrack && window.currentTrack.videoId === t.videoId;
+        var isPlaying = isActive && window._localAudioPlaying && window.isPlaying;
+        var color = isActive ? '#a78bfa' : 'rgba(255,255,255,0.5)';
+        var path = isPlaying ? pausePath : playPath;
+        el.innerHTML = '<svg viewBox="0 0 24 24" style="fill:' + color + ';width:22px;height:22px;flex-shrink:0;"><path d="' + path + '"/></svg>';
+    });
 }
 function renderHCard(t) {
     _cacheTrack(t);
@@ -837,15 +872,17 @@ function toggleLike() {
 // LIBRARY
 function renderLibraryUI() {
     const container = document.getElementById('libraryContainer'); if (!container || !db) return;
-    const tx = db.transaction(['liked_songs', 'playlists', 'downloaded_songs'], 'readonly');
-    let liked = [], playlists = [], downloaded = [];
+    const tx = db.transaction(['liked_songs', 'playlists', 'downloaded_songs', 'subscribed_songs'], 'readonly');
+    let liked = [], playlists = [], downloaded = [], subscribed = [];
     tx.objectStore('liked_songs').getAll().onsuccess = (e) => { liked = e.target.result || []; };
     tx.objectStore('playlists').getAll().onsuccess = (e) => { playlists = e.target.result || []; };
     tx.objectStore('downloaded_songs').getAll().onsuccess = (e) => { downloaded = e.target.result || []; };
+    tx.objectStore('subscribed_songs').getAll().onsuccess = (e) => { subscribed = e.target.result || []; };
     tx.oncomplete = () => {
         const history = JSON.parse(localStorage.getItem('auspotyHistory') || '[]');
         let html = '';
         html += '<div class="lib-item" onclick="openLikedSongs()"><div class="lib-item-img liked"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu yang Disukai</div><div class="lib-item-sub">Playlist \u00b7 ' + liked.length + ' lagu</div></div></div>';
+        html += '<div class="lib-item" onclick="openSubscribedSongs()"><div class="lib-item-img" style="background:linear-gradient(135deg,#f59e0b,#ef4444);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Langganan</div><div class="lib-item-sub">Koleksi \u00b7 ' + subscribed.length + ' lagu</div></div></div>';
         html += '<div class="lib-item" onclick="openHistoryView()"><div class="lib-item-img" style="background:linear-gradient(135deg,#1e3264,#477d95);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Riwayat Diputar</div><div class="lib-item-sub">Koleksi \u00b7 ' + history.length + ' lagu</div></div></div>';
         html += '<div class="lib-item" onclick="openDownloadedSongs()"><div class="lib-item-img" style="background:linear-gradient(135deg,#2d6a4f,#739c18);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" style="fill:white;width:28px;height:28px;"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg></div><div class="lib-item-info"><div class="lib-item-title">Lagu Diunduh</div><div class="lib-item-sub">Koleksi \u00b7 ' + downloaded.length + ' lagu</div></div></div>';
         playlists.forEach(pl => {
@@ -911,6 +948,48 @@ function deleteDownloadedSong(videoId) {
     const tx = db.transaction('downloaded_songs', 'readwrite');
     tx.objectStore('downloaded_songs').delete(videoId);
     tx.oncomplete = () => { showToast('Dihapus dari unduhan'); openDownloadedSongs(); };
+}
+
+// SUBSCRIBE / LANGGANAN LAGU
+function toggleSubscribe() {
+    if (!currentTrack || !db) return;
+    const tx = db.transaction('subscribed_songs', 'readwrite');
+    const store = tx.objectStore('subscribed_songs');
+    store.get(currentTrack.videoId).onsuccess = (e) => {
+        if (e.target.result) {
+            store.delete(currentTrack.videoId);
+            showToast('Dihapus dari Langganan');
+        } else {
+            store.put({ videoId: currentTrack.videoId, title: currentTrack.title || '', artist: currentTrack.artist || '', img: currentTrack.img || '', subscribedAt: Date.now() });
+            showToast('Ditambahkan ke Langganan!');
+        }
+        tx.oncomplete = () => { checkIfSubscribed(currentTrack.videoId); renderLibraryUI(); };
+    };
+}
+function checkIfSubscribed(videoId) {
+    if (!db) return;
+    const tx = db.transaction('subscribed_songs', 'readonly');
+    tx.objectStore('subscribed_songs').get(videoId).onsuccess = (e) => {
+        const subscribed = !!e.target.result;
+        const btn = document.getElementById('btnSubscribeSong');
+        if (btn) { btn.style.fill = subscribed ? '#f59e0b' : 'white'; btn.title = subscribed ? 'Batal Langganan' : 'Langganan'; }
+    };
+}
+function openSubscribedSongs() {
+    if (!db) return;
+    const tx = db.transaction('subscribed_songs', 'readonly');
+    tx.objectStore('subscribed_songs').getAll().onsuccess = (e) => {
+        const tracks = e.target.result || [];
+        document.getElementById('playlistNameDisplay').innerText = 'Langganan';
+        document.getElementById('playlistStatsDisplay').innerText = tracks.length + ' lagu';
+        document.getElementById('playlistImageDisplay').src = tracks.length > 0 ? (tracks[0].img || '') : 'https://via.placeholder.com/220x220?text=music';
+        window._playlistTracks = tracks;
+        window._isDownloadedView = false;
+        document.getElementById('playlistTracksContainer').innerHTML = tracks.length > 0
+            ? tracks.map(renderVItem).join('')
+            : '<div style="color:var(--text-sub);padding:16px;">Belum ada lagu dilanggan.<br><small>Tekan ikon 🔔 saat memutar lagu.</small></div>';
+        switchView('playlist');
+    };
 }
 function openPlaylist(id) {
     if (!db) return;
@@ -1154,6 +1233,26 @@ function openCommentsModal() {
     loadComments(currentTrack.videoId);
 }
 function closeCommentsModal() { document.getElementById('commentsModal').style.display = 'none'; }
+
+// State untuk reply
+window._replyTo = null;
+
+function _setReply(docId, name) {
+    window._replyTo = docId;
+    const input = document.getElementById('commentInput');
+    input.placeholder = 'Balas ' + name + '...';
+    input.focus();
+    const cancelBtn = document.getElementById('cancelReplyBtn');
+    if (cancelBtn) cancelBtn.style.display = 'inline-block';
+}
+function _cancelReply() {
+    window._replyTo = null;
+    const input = document.getElementById('commentInput');
+    input.placeholder = 'Tulis komentar...';
+    const cancelBtn = document.getElementById('cancelReplyBtn');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+}
+
 async function loadComments(videoId) {
     const list = document.getElementById('commentsList');
     list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Memuat komentar...</div>';
@@ -1163,24 +1262,100 @@ async function loadComments(videoId) {
         const q = window._fsQuery(window._fsCollection(db_fs, 'comments'), window._fsWhere('videoId', '==', videoId));
         const snap = await window._fsGetDocs(q);
         if (snap.empty) { list.innerHTML = '<div style="color:var(--text-sub);text-align:center;padding:20px;font-size:13px;">Belum ada komentar. Jadilah yang pertama!</div>'; return; }
-        const docs = snap.docs.map(doc => doc.data());
-        docs.sort((a, b) => (b.createdAt ? b.createdAt.seconds : 0) - (a.createdAt ? a.createdAt.seconds : 0));
-        list.innerHTML = docs.map(d => {
+        const user = getGoogleUser();
+        const myEmail = user ? user.email : '';
+        const isAdminUser = myEmail === 'yusrilrizky149@gmail.com';
+
+        // Pisahkan komentar utama dan reply
+        const allDocs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        allDocs.sort((a, b) => (a.createdAt ? a.createdAt.seconds : 0) - (b.createdAt ? b.createdAt.seconds : 0));
+        const mainComments = allDocs.filter(d => !d.replyTo);
+        const replies = allDocs.filter(d => d.replyTo);
+
+        list.innerHTML = mainComments.map(d => {
             const isAdmin = d.email === 'yusrilrizky149@gmail.com';
-            const badge = isAdmin ? '<span style="background:linear-gradient(135deg,#a78bfa,#f472b6);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;">ADMIN</span>' : '<span style="background:rgba(255,255,255,0.1);color:var(--text-sub);font-size:10px;font-weight:600;padding:2px 8px;border-radius:10px;margin-left:6px;">Pengguna</span>';
+            const badge = isAdmin ? '<span style="background:linear-gradient(135deg,#a78bfa,#f472b6);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;">ADMIN</span>' : '';
             const time = d.createdAt ? new Date(d.createdAt.seconds * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-            return '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;"><div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">' + (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : d.name.charAt(0).toUpperCase()) + '</div><div style="flex:1;background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;"><span style="font-size:13px;font-weight:700;color:var(--accent);">' + d.name + badge + '</span><span style="font-size:11px;color:var(--text-sub);">' + time + '</span></div><p style="font-size:14px;color:white;line-height:1.5;margin:0;">' + d.text + '</p></div></div>';
+            const likes = (d.likes || []).length;
+            const liked = myEmail && (d.likes || []).includes(myEmail);
+            const canDelete = myEmail === d.email || isAdminUser;
+
+            // Render replies untuk komentar ini
+            const myReplies = replies.filter(r => r.replyTo === d.id);
+            const repliesHtml = myReplies.map(r => {
+                const rAdmin = r.email === 'yusrilrizky149@gmail.com';
+                const rBadge = rAdmin ? '<span style="background:linear-gradient(135deg,#a78bfa,#f472b6);color:#fff;font-size:9px;font-weight:700;padding:1px 6px;border-radius:8px;margin-left:4px;">ADMIN</span>' : '';
+                const rTime = r.createdAt ? new Date(r.createdAt.seconds * 1000).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                const rLikes = (r.likes || []).length;
+                const rLiked = myEmail && (r.likes || []).includes(myEmail);
+                const rCanDelete = myEmail === r.email || isAdminUser;
+                return '<div style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;padding-left:8px;border-left:2px solid rgba(167,139,250,0.3);">' +
+                    '<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">' + (r.picture ? '<img src="' + r.picture + '" style="width:100%;height:100%;object-fit:cover;">' : r.name.charAt(0).toUpperCase()) + '</div>' +
+                    '<div style="flex:1;background:rgba(255,255,255,0.04);border-radius:10px;padding:8px 12px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;flex-wrap:wrap;gap:3px;">' +
+                    '<span style="font-size:12px;font-weight:700;color:var(--accent);">' + r.name + rBadge + '</span>' +
+                    '<span style="font-size:10px;color:var(--text-sub);">' + rTime + '</span></div>' +
+                    '<p style="font-size:13px;color:white;line-height:1.4;margin:0 0 6px;">' + r.text + '</p>' +
+                    '<div style="display:flex;gap:12px;align-items:center;">' +
+                    '<span onclick="_likeComment(\'' + r.id + '\')" style="cursor:pointer;font-size:12px;color:' + (rLiked ? '#f472b6' : 'rgba(255,255,255,0.4)') + ';display:flex;align-items:center;gap:3px;">❤ ' + rLikes + '</span>' +
+                    (rCanDelete ? '<span onclick="_deleteComment(\'' + r.id + '\')" style="cursor:pointer;font-size:11px;color:rgba(255,80,80,0.7);">Hapus</span>' : '') +
+                    '</div></div></div>';
+            }).join('');
+
+            return '<div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;">' +
+                '<div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;">' + (d.picture ? '<img src="' + d.picture + '" style="width:100%;height:100%;object-fit:cover;">' : d.name.charAt(0).toUpperCase()) + '</div>' +
+                '<div style="flex:1;">' +
+                '<div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:10px 14px;">' +
+                '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;flex-wrap:wrap;gap:4px;">' +
+                '<span style="font-size:13px;font-weight:700;color:var(--accent);">' + d.name + badge + '</span>' +
+                '<span style="font-size:11px;color:var(--text-sub);">' + time + '</span></div>' +
+                '<p style="font-size:14px;color:white;line-height:1.5;margin:0 0 8px;">' + d.text + '</p>' +
+                '<div style="display:flex;gap:14px;align-items:center;">' +
+                '<span onclick="_likeComment(\'' + d.id + '\')" style="cursor:pointer;font-size:12px;color:' + (liked ? '#f472b6' : 'rgba(255,255,255,0.4)') + ';display:flex;align-items:center;gap:3px;">❤ ' + likes + '</span>' +
+                (myEmail ? '<span onclick="_setReply(\'' + d.id + '\',\'' + d.name.replace(/'/g, "\\'") + '\')" style="cursor:pointer;font-size:12px;color:rgba(255,255,255,0.4);">Balas</span>' : '') +
+                (canDelete ? '<span onclick="_deleteComment(\'' + d.id + '\')" style="cursor:pointer;font-size:12px;color:rgba(255,80,80,0.7);">Hapus</span>' : '') +
+                '</div></div>' +
+                repliesHtml +
+                '</div></div>';
         }).join('');
     } catch(e) { list.innerHTML = '<div style="color:#ff5252;text-align:center;padding:20px;font-size:13px;">Gagal memuat: ' + e.message + '</div>'; }
 }
+
+async function _deleteComment(docId) {
+    if (!confirm('Hapus komentar ini?')) return;
+    try {
+        await window._fsDeleteDoc(window._fsDoc(window._firestoreDB, 'comments', docId));
+        showToast('Komentar dihapus');
+        loadComments(currentTrack.videoId);
+    } catch(e) { showToast('Gagal hapus: ' + e.message); }
+}
+
+async function _likeComment(docId) {
+    const user = getGoogleUser();
+    if (!user) { showToast('Login dulu untuk memberi like'); return; }
+    try {
+        const ref = window._fsDoc(window._firestoreDB, 'comments', docId);
+        const snap = await window._fsGetDocs(window._fsQuery(window._fsCollection(window._firestoreDB, 'comments'), window._fsWhere('__name__', '==', docId)));
+        // Gunakan updateDoc dengan arrayUnion/arrayRemove
+        const docSnap = (await window._fsGetDocs(window._fsQuery(window._fsCollection(window._firestoreDB, 'comments')))).docs.find(d => d.id === docId);
+        if (!docSnap) return;
+        const likes = docSnap.data().likes || [];
+        const alreadyLiked = likes.includes(user.email);
+        await window._fsUpdateDoc(ref, { likes: alreadyLiked ? window._fsArrayRemove(user.email) : window._fsArrayUnion(user.email) });
+        loadComments(currentTrack.videoId);
+    } catch(e) { showToast('Gagal: ' + e.message); }
+}
+
 async function submitComment() {
     const user = getGoogleUser(); if (!user) { showToast('Login dulu untuk berkomentar'); return; }
     if (!currentTrack) return;
     const input = document.getElementById('commentInput'); const text = input.value.trim();
     if (!text) { showToast('Komentar tidak boleh kosong'); return; }
     try {
-        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'comments'), { videoId: currentTrack.videoId, name: user.name, email: user.email, picture: user.picture || '', text: text, createdAt: window._fsTimestamp() });
-        input.value = ''; showToast('Komentar terkirim!'); loadComments(currentTrack.videoId);
+        const data = { videoId: currentTrack.videoId, name: user.name, email: user.email, picture: user.picture || '', text: text, createdAt: window._fsTimestamp(), likes: [] };
+        if (window._replyTo) data.replyTo = window._replyTo;
+        await window._fsAddDoc(window._fsCollection(window._firestoreDB, 'comments'), data);
+        input.value = ''; _cancelReply(); showToast('Komentar terkirim!'); loadComments(currentTrack.videoId);
     } catch(e) { showToast('Gagal kirim: ' + e.message); }
 }
 
