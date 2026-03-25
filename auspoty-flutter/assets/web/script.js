@@ -1051,18 +1051,24 @@ function saveProfile() {
     const name = document.getElementById('editProfileName').value.trim() || 'Pengguna Auspoty';
     saveSettings({ profileName: name }); applyAllSettings(); updateProfileUI(); closeEditProfile(); showToast('Profil disimpan!');
 }
-function triggerPhotoUpload() { document.getElementById('profilePhotoInput').click(); }
+function triggerPhotoUpload() {
+    if (window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('pickProfilePhoto'); } catch(e) {}
+    } else {
+        document.getElementById('profilePhotoInput').click();
+    }
+}
+function applyProfilePhoto(base64) {
+    localStorage.setItem('auspotyProfilePhoto', base64);
+    const av = document.getElementById('editProfileAvatar'); if (av) av.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    const settAv = document.getElementById('settingsAvatar'); if (settAv) settAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    const homeAv = document.querySelector('.app-avatar'); if (homeAv) homeAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
+    showToast('Foto profil diperbarui!');
+}
 function handleProfilePhotoChange(event) {
     const file = event.target.files[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
-        const base64 = e.target.result;
-        localStorage.setItem('auspotyProfilePhoto', base64);
-        const av = document.getElementById('editProfileAvatar'); if (av) av.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        const settAv = document.getElementById('settingsAvatar'); if (settAv) settAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        const homeAv = document.querySelector('.app-avatar'); if (homeAv) homeAv.innerHTML = '<img src="' + base64 + '" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">';
-        showToast('Foto profil diperbarui!');
-    };
+    reader.onload = (e) => { applyProfilePhoto(e.target.result); };
     reader.readAsDataURL(file);
 }
 
@@ -1107,9 +1113,15 @@ function downloadMusic() {
 // GOOGLE AUTH
 function getGoogleUser() { try { return JSON.parse(localStorage.getItem('auspotyGoogleUser') || 'null'); } catch(e) { return null; } }
 function loginWithGoogle() {
-    if (window.AndroidBridge && typeof window.AndroidBridge.openGoogleLogin === 'function') window.AndroidBridge.openGoogleLogin();
-    else if (typeof window._firebaseSignIn === 'function') window._firebaseSignIn();
-    else showToast('Login Google belum tersedia');
+    if (window.flutter_inappwebview) {
+        try { window.flutter_inappwebview.callHandler('openGoogleLogin'); } catch(e) {}
+    } else if (window.AndroidBridge && typeof window.AndroidBridge.openGoogleLogin === 'function') {
+        window.AndroidBridge.openGoogleLogin();
+    } else if (typeof window._firebaseSignIn === 'function') {
+        window._firebaseSignIn();
+    } else {
+        showToast('Login Google belum tersedia');
+    }
 }
 function logoutFromGoogle() {
     if (window.AndroidBridge && typeof window.AndroidBridge.logout === 'function') window.AndroidBridge.logout();

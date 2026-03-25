@@ -955,13 +955,13 @@ class _AuspotyWebViewState extends State<AuspotyWebView> with WidgetsBindingObse
                       _localPlaying = false;
                       try { await _ch.invokeMethod('setPlaying', {'isPlaying': false}); } catch (_) {}
                       await c.evaluateJavascript(source:
-                        "(function(){isPlaying=false;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
-                    } else if (_localPlaying || _localPlayer.processingState != ProcessingState.idle) {
+                        "(function(){isPlaying=false;window._localAudioPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(false);if(typeof _setArtPlaying==='function')_setArtPlaying(false);})();");
+                    } else {
                       await _localPlayer.play();
                       _localPlaying = true;
                       try { await _ch.invokeMethod('setPlaying', {'isPlaying': true}); } catch (_) {}
                       await c.evaluateJavascript(source:
-                        "(function(){isPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(true);if(typeof _setArtPlaying==='function')_setArtPlaying(true);})();");
+                        "(function(){isPlaying=true;window._localAudioPlaying=true;if(typeof updatePlayPauseBtn==='function')updatePlayPauseBtn(true);if(typeof _setArtPlaying==='function')_setArtPlaying(true);})();");
                     }
                   },
                 );
