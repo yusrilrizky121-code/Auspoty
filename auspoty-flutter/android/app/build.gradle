@@ -12,7 +12,7 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace "com.auspoty.app"
-    compileSdk 35
+    compileSdk 36
     ndkVersion flutter.ndkVersion
 
     // Kurangi ukuran: hanya build arm64 (sesuai permintaan kamu)
@@ -38,7 +38,7 @@ android {
     defaultConfig {
         applicationId "com.auspoty.app"
         minSdkVersion flutter.minSdkVersion
-        targetSdk 35
+        targetSdk 36
         versionCode 18
         versionName "8.4.0"
         multiDexEnabled true
